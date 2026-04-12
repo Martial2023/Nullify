@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  ownedProjects  Project[]        @relation("ownedProjects")
+  memberships    ProjectMember[]
+  chatSessions   ChatSession[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  sessions       Session[]
+  accounts       Account[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+
+// ─── Projets & Collaboration ───────────────────────────────
+
+model Project {
+  id          String            @id @default(cuid())
+  name        String            // "Audit example.com"
+  description String?
+  targets     String[]          // ["example.com", "api.example.com"]
+  ownerId     String
+  owner       User              @relation("ownedProjects", fields: [ownerId], references: [id])
+  members     ProjectMember[]
+  sessions    ChatSession[]
+  scans       Scan[]
+  reports     Report[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model ProjectMember {
+  id        String       @id @default(cuid())
+  role      ProjectRole  @default(MEMBER)
+  status    InviteStatus @default(PENDING)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedBy String?      // userId de celui qui a invité
+  joinedAt  DateTime?
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, projectId])
+}
+
+// ─── Chat ──────────────────────────────────────────────────
+
+model ChatSession {
+  id        String    @id @default(cuid())
+  title     String?
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  role      MessageRole
+  content   String
+  toolCalls Json?
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+}
+
+// ─── Scans & Findings ──────────────────────────────────────
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Scan {
+  id        String     @id @default(cuid())
+  tool      String     // "nmap", "nuclei", "subfinder"...
+  target    String
+  args      Json       // Arguments passés à l'outil
+  status    ScanStatus @default(PENDING)
+  output    String?    // Sortie brute
+  error     String?    // Message d'erreur si failed
+  findings  Finding[]
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startedBy String?    // userId
+  startedAt DateTime   @default(now())
+  endedAt   DateTime?
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum FindingStatus {
+  OPEN
+  CONFIRMED
+  FALSE_POSITIVE
+  RESOLVED
+}
+
+model Finding {
+  id          String        @id @default(cuid())
+  severity    Severity
+  status      FindingStatus @default(OPEN)
+  title       String
+  description String
+  target      String?       // Cible spécifique du finding
+  evidence    String?
+  remediation String?
+  scanId      String
+  scan        Scan          @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+// ─── Rapports ──────────────────────────────────────────────
+
+enum ReportStatus {
+  GENERATING
+  READY
+  FAILED
+}
+
+model Report {
+  id        String       @id @default(cuid())
+  title     String
+  summary   String?      // Résumé généré par l'IA
+  content   Json?        // Contenu structuré du rapport
+  status    ReportStatus @default(GENERATING)
+  projectId String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy String?      // userId
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
