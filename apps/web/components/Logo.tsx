@@ -9,22 +9,9 @@ export default function Logo() {
                 <Component className="h-6 w-6 text-white" />
             </div>
             <span className="text-xl font-bold">BBros</span> */}
-            <Image
-                src={"/logo2.svg"}
-                width={22}
-                height={40}
-                className="text-primary-500 dark:hidden"
-                alt="ClientManager"
-            />
-            <Image
-                src={"/logo-dark.svg"}
-                width={22}
-                height={40}
-                className="text-primary-500 hidden dark:block"
-                alt="ClientManager"
-            />
+            <Code />
             <h2 className="text-2xl font-bold flex items-center">
-                Klarna
+                Nullify
             </h2>
         </div>
     )
