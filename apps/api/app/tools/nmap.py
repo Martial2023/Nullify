@@ -2,7 +2,7 @@
 
 import re
 
-from app.tools.base import SecurityTool, ToolResult
+from app.tools.base import SecurityTool
 
 
 class NmapTool(SecurityTool):
@@ -12,7 +12,6 @@ class NmapTool(SecurityTool):
         "Use this for network reconnaissance and service enumeration."
     )
     binary = "nmap"
-    docker_image = "instrumentisto/nmap:latest"
     parameters = {
         "type": "object",
         "properties": {

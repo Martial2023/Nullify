@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { PanelLeft, PanelRight } from "lucide-react"
 import { createProject } from "@/app/(actions)/project"
-import { createChatSession, sendMessage } from "@/app/(actions)/chat"
+import { createChatSession, persistUserMessage, persistAssistantMessage } from "@/app/(actions)/chat"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import type { Message } from "@/types"
+import type { SSEEvent } from "@/types/api"
 import { MessageList } from "../_components/message-list"
 import { ChatInput } from "../_components/chat-input"
 import { ChatEmptyState } from "../_components/chat-empty-state"
@@ -38,16 +39,100 @@ export default function NewChatPage() {
     setSending(true)
 
     try {
-      // Create project + session + send message
+      // 1. Create project + session
       const project = await createProject({
         name: generateProjectName(content),
       })
       const session = await createChatSession(project.id, generateProjectName(content))
-      const assistantMsg = await sendMessage(session.id, content, modelId)
 
-      setMessages((prev) => [...prev, assistantMsg])
+      // 2. Persist user message
+      await persistUserMessage(session.id, content)
 
-      // Redirect to the real chat page (replaces history)
+      // 3. Stream from FastAPI via Next.js proxy
+      const resp = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: content,
+          session_id: session.id,
+          project_id: project.id,
+          model: modelId,
+        }),
+      })
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Stream error: ${resp.status}`)
+      }
+
+      // 4. Placeholder assistant message
+      const assistantId = crypto.randomUUID()
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantId,
+          role: "ASSISTANT" as const,
+          content: "",
+          toolCalls: null,
+          sessionId: session.id,
+          createdAt: new Date(),
+        },
+      ])
+
+      // 5. Read SSE stream
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let finalContent = ""
+      let collectedToolCalls: Message["toolCalls"] | undefined
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          const json = line.slice(6).trim()
+          if (!json) continue
+
+          let event: SSEEvent
+          try {
+            event = JSON.parse(json)
+          } catch {
+            continue
+          }
+
+          if (event.event === "message" || event.event === "thinking") {
+            if (event.event === "message") {
+              finalContent = event.content ?? ""
+            } else {
+              finalContent += event.content ?? ""
+            }
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: finalContent } : m
+              )
+            )
+          } else if (event.event === "done") {
+            collectedToolCalls = event.tool_calls ?? undefined
+          } else if (event.event === "error") {
+            finalContent = `Error: ${event.content ?? "Unknown error"}`
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: finalContent } : m
+              )
+            )
+          }
+        }
+      }
+
+      // 6. Persist assistant message
+      await persistAssistantMessage(session.id, finalContent, collectedToolCalls ?? undefined)
+
+      // Redirect to the real chat page
       router.replace(`/chat/${project.id}`)
     } catch (error) {
       console.error("Failed to create chat:", error)

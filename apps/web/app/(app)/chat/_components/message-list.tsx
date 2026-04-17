@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import type { Message } from "@/types"
-import { Bot } from "lucide-react"
+import { Bot, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { ThinkingIndicator } from "@/components/ThinkingIndicator"
@@ -36,10 +36,15 @@ function AssistantMessage({ message }: { message: Message }) {
             <span className="text-zinc-500">
               {JSON.stringify(tc.args)}
             </span>
-            {tc.result && (
+            {tc.result ? (
               <pre className="mt-1 max-h-48 overflow-y-auto text-zinc-400 whitespace-pre-wrap">
                 {tc.result}
               </pre>
+            ) : (
+              <div className="mt-1 flex items-center gap-1.5 text-zinc-500">
+                <Loader2 className="size-3 animate-spin" />
+                <span>Running...</span>
+              </div>
             )}
           </div>
         ))}

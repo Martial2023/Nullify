@@ -25,3 +25,21 @@ export interface ChatResponse {
   toolCalls?: ToolCall[];
   done: boolean;
 }
+
+export type SSEEventType =
+  | "thinking"
+  | "tool_start"
+  | "tool_output"
+  | "message"
+  | "error"
+  | "done"
+
+export interface SSEEvent {
+  event: SSEEventType
+  content?: string
+  tool_call_id?: string
+  name?: string
+  args?: Record<string, unknown>
+  result?: string
+  tool_calls?: ToolCall[]
+}

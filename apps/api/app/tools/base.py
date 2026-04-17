@@ -1,11 +1,12 @@
-"""Base class for all security tools."""
+"""Base class for all security tools — Docker-only execution."""
 
 import asyncio
-import re
 import shutil
-import sys
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+TOOLS_IMAGE = "nullify-tools:latest"
 
 
 @dataclass
@@ -19,7 +20,7 @@ class ToolResult:
 
 
 def _docker_available() -> bool:
-    """Check if Docker daemon is running."""
+    """Check if the Docker CLI is reachable."""
     return shutil.which("docker") is not None
 
 
@@ -28,19 +29,16 @@ class SecurityTool(ABC):
 
     name: str
     description: str
-    binary: str  # nom de l'exécutable (ex: "nmap")
-    docker_image: str  # image Docker (ex: "projectdiscovery/httpx:latest")
-    parameters: dict  # JSON Schema pour Claude tool_use
+    binary: str
+    docker_image: str = TOOLS_IMAGE
+    parameters: dict
 
     def is_available(self) -> bool:
-        """Tool is available if Docker is running or the binary is installed locally."""
-        if _docker_available():
-            return True
-        return shutil.which(self.binary) is not None
+        return _docker_available()
 
     @abstractmethod
     def build_command(self, args: dict) -> list[str]:
-        """Build the CLI command from arguments (without the binary name prefix)."""
+        """Build the full CLI command (binary included)."""
         ...
 
     @abstractmethod
@@ -48,68 +46,40 @@ class SecurityTool(ABC):
         """Parse raw CLI output into structured findings."""
         ...
 
-    # Extra CLI flags appended when running inside Docker
-    # (e.g. ["-duc", "-nc"] for ProjectDiscovery tools).
-    docker_extra_args: list[str] = []
-
-    def _build_docker_command(self, tool_args: list[str]) -> list[str]:
-        """Wrap tool arguments inside `docker run`.
-
-        Docker images from ProjectDiscovery / instrumentisto have the tool
-        binary as ENTRYPOINT, so we only pass the arguments.
-        On Windows Docker Desktop, --network host doesn't work the same way,
-        so we also add host.docker.internal mapping.
-        """
+    def _build_docker_command(self, cmd: list[str], container_name: str) -> list[str]:
+        """Wrap a full command inside `docker run`."""
         return [
             "docker", "run", "--rm",
             "--network", "host",
-            "--add-host=host.docker.internal:host-gateway",
+            "--name", container_name,
             self.docker_image,
-            *tool_args,
-            *self.docker_extra_args,
+            *cmd,
         ]
 
-    @staticmethod
-    def _rewrite_localhost_for_docker(args: dict) -> dict:
-        """Replace localhost/127.0.0.1 references with host.docker.internal.
-
-        On Windows/macOS Docker Desktop, containers can't reach the host's
-        localhost directly — they must use host.docker.internal instead.
-        """
-        if sys.platform != "linux":
-            patched = {}
-            for k, v in args.items():
-                if isinstance(v, str):
-                    v = re.sub(
-                        r"(https?://)?(localhost|127\.0\.0\.1)",
-                        lambda m: (m.group(1) or "") + "host.docker.internal",
-                        v,
-                    )
-                patched[k] = v
-            return patched
-        return args
+    async def _kill_container(self, name: str) -> None:
+        try:
+            p = await asyncio.create_subprocess_exec(
+                "docker", "kill", name,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(p.wait(), timeout=10)
+        except Exception:
+            pass
 
     async def execute(self, args: dict, timeout: int = 120) -> ToolResult:
-        """Execute the tool via Docker (preferred) or local binary."""
-        use_docker = _docker_available()
-
-        # Rewrite localhost targets when running inside Docker on Windows/macOS
-        effective_args = self._rewrite_localhost_for_docker(args) if use_docker else args
-        cmd = self.build_command(effective_args)
-
-        if use_docker:
-            # build_command returns [binary, ...args] — strip the binary
-            # because Docker ENTRYPOINT already provides it.
-            tool_args = cmd[1:] if cmd and cmd[0] == self.binary else cmd
-            exec_cmd = self._build_docker_command(tool_args)
-        elif shutil.which(self.binary):
-            exec_cmd = cmd
-        else:
+        """Execute the tool inside Docker."""
+        if not _docker_available():
             return ToolResult(
-                success=False,
-                output="",
-                error=f"Tool '{self.binary}' is not available: Docker is not running and binary is not in PATH.",
+                success=False, output="",
+                error="Docker is not available on this system.",
             )
+
+        cmd = self.build_command(args)
+        container_name = f"nullify-{self.name}-{uuid.uuid4().hex[:8]}"
+        exec_cmd = self._build_docker_command(cmd, container_name)
+
+        print(f"[{self.name}] EXEC: {' '.join(exec_cmd)}")
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -118,42 +88,31 @@ class SecurityTool(ABC):
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            # Collect stdout lines as they arrive so we keep partial output
-            # even if the process hangs (common with ProjectDiscovery tools).
-            stdout_lines: list[str] = []
-            stderr_lines: list[str] = []
             timed_out = False
-
-            async def _read_stream(
-                stream: asyncio.StreamReader | None, dest: list[str]
-            ) -> None:
-                if stream is None:
-                    return
-                while True:
-                    line = await stream.readline()
-                    if not line:
-                        break
-                    dest.append(line.decode(errors="replace"))
-
             try:
-                await asyncio.wait_for(
-                    asyncio.gather(
-                        _read_stream(proc.stdout, stdout_lines),
-                        _read_stream(proc.stderr, stderr_lines),
-                    ),
-                    timeout=timeout,
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=timeout
                 )
-                await proc.wait()
             except asyncio.TimeoutError:
                 timed_out = True
+                await self._kill_container(container_name)
                 try:
                     proc.kill()
-                    await proc.wait()
                 except Exception:
                     pass
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(), timeout=5
+                    )
+                except Exception:
+                    stdout, stderr = b"", b""
 
-            raw = "".join(stdout_lines)
-            err = "".join(stderr_lines)
+            raw = stdout.decode(errors="replace")
+            err = stderr.decode(errors="replace")
+
+            print(f"[{self.name}] DONE — timed_out={timed_out} returncode={proc.returncode} stdout={len(raw)}ch")
+            if err.strip():
+                print(f"[{self.name}] STDERR: {err[:200]}")
 
             if timed_out and not raw.strip():
                 return ToolResult(
@@ -168,6 +127,8 @@ class SecurityTool(ABC):
             return ToolResult(success=True, output=raw, findings=findings)
 
         except Exception as e:
+            print(f"[{self.name}] EXCEPTION: {type(e).__name__}: {e}")
+            await self._kill_container(container_name)
             return ToolResult(success=False, output="", error=str(e))
 
     def to_claude_tool(self) -> dict:

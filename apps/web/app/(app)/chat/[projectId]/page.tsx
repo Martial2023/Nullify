@@ -9,10 +9,12 @@ import {
   getChatSessions,
   createChatSession,
   getChatSession,
-  sendMessage,
+  persistUserMessage,
+  persistAssistantMessage,
 } from "@/app/(actions)/chat"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
-import type { Message, ChatSession, Project } from "@/types"
+import type { Message, ChatSession, Project, ToolCall } from "@/types"
+import type { SSEEvent } from "@/types/api"
 import { MessageList } from "../_components/message-list"
 import { ChatInput } from "../_components/chat-input"
 import { ChatEmptyState } from "../_components/chat-empty-state"
@@ -30,6 +32,7 @@ export default function ChatPage() {
   const [toolsOpen, setToolsOpen] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(true)
   const [sending, setSending] = useState<boolean>(false)
+  const [liveToolCalls, setLiveToolCalls] = useState<ToolCall[]>([])
 
   const init = useCallback(async () => {
     try {
@@ -60,7 +63,7 @@ export default function ChatPage() {
   }, [init])
 
   const handleSend = async (content: string) => {
-    if (!session) return
+    if (!session || !project) return
 
     // Optimistic: show user message immediately
     const userMsg: Message = {
@@ -73,14 +76,148 @@ export default function ChatPage() {
     }
     setMessages((prev) => [...prev, userMsg])
     setSending(true)
+    setLiveToolCalls([])
 
     try {
-      const assistantMsg = await sendMessage(session.id, content, modelId)
+      // 1. Persist user message in DB
+      await persistUserMessage(session.id, content)
+
+      // 2. Stream from FastAPI via Next.js proxy
+      const resp = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: content,
+          session_id: session.id,
+          project_id: project.id,
+          model: modelId,
+        }),
+      })
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Stream error: ${resp.status}`)
+      }
+
+      // 3. Create placeholder assistant message
+      const assistantId = crypto.randomUUID()
+      const assistantMsg: Message = {
+        id: assistantId,
+        role: "ASSISTANT",
+        content: "",
+        toolCalls: null,
+        sessionId: session.id,
+        createdAt: new Date(),
+      }
       setMessages((prev) => [...prev, assistantMsg])
+
+      // 4. Read SSE stream
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let finalContent = ""
+      let collectedToolCalls: ToolCall[] | undefined
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          const json = line.slice(6).trim()
+          if (!json) continue
+
+          let event: SSEEvent
+          try {
+            event = JSON.parse(json)
+          } catch {
+            continue
+          }
+
+          switch (event.event) {
+            case "thinking":
+              // Show LLM reasoning as streaming content
+              if (event.content) {
+                finalContent += event.content
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId ? { ...m, content: finalContent } : m
+                  )
+                )
+              }
+              break
+
+            case "tool_start":
+              if (event.tool_call_id && event.name) {
+                const tc: ToolCall = {
+                  id: event.tool_call_id,
+                  name: event.name,
+                  args: event.args ?? {},
+                }
+                setLiveToolCalls((prev) => [...prev, tc])
+              }
+              break
+
+            case "tool_output":
+              if (event.tool_call_id) {
+                setLiveToolCalls((prev) =>
+                  prev.map((tc) =>
+                    tc.id === event.tool_call_id
+                      ? { ...tc, result: event.result ?? "" }
+                      : tc
+                  )
+                )
+              }
+              break
+
+            case "message":
+              finalContent = event.content ?? ""
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: finalContent } : m
+                )
+              )
+              break
+
+            case "done":
+              collectedToolCalls = event.tool_calls ?? undefined
+              break
+
+            case "error":
+              finalContent = `Error: ${event.content ?? "Unknown error"}`
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: finalContent } : m
+                )
+              )
+              break
+          }
+        }
+      }
+
+      // 5. Persist assistant message in DB
+      const saved = await persistAssistantMessage(
+        session.id,
+        finalContent,
+        collectedToolCalls
+      )
+
+      // Update with DB id and final tool calls
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...saved }
+            : m
+        )
+      )
     } catch (error) {
       console.error("Failed to send message:", error)
     } finally {
       setSending(false)
+      setLiveToolCalls([])
     }
   }
 
@@ -149,6 +286,7 @@ export default function ChatPage() {
         projectId={projectId}
         open={toolsOpen}
         onOpenChange={setToolsOpen}
+        liveToolCalls={liveToolCalls}
       />
     </div>
   )

@@ -13,8 +13,6 @@ class HttpxTool(SecurityTool):
         "Use after subdomain discovery to find live web servers."
     )
     binary = "httpx"
-    docker_image = "projectdiscovery/httpx:latest"
-    docker_extra_args = ["-duc", "-nc"]
     parameters = {
         "type": "object",
         "properties": {
@@ -28,8 +26,6 @@ class HttpxTool(SecurityTool):
 
     def build_command(self, args: dict) -> list[str]:
         targets = args["targets"]
-        # httpx reads from stdin, but we can use -u for single or -l for list
-        # For simplicity, use -u with comma-separated → pipe approach
         return [
             "httpx",
             "-u", targets,
@@ -38,6 +34,9 @@ class HttpxTool(SecurityTool):
             "-title",
             "-tech-detect",
             "-json",
+            "-timeout", "10",
+            "-duc",
+            "-nc",
         ]
 
     def parse_output(self, raw_output: str) -> list[dict]:

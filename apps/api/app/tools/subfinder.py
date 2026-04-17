@@ -10,8 +10,6 @@ class SubfinderTool(SecurityTool):
         "Use this for reconnaissance to map the attack surface."
     )
     binary = "subfinder"
-    docker_image = "projectdiscovery/subfinder:latest"
-    docker_extra_args = ["-duc", "-nc"]
     parameters = {
         "type": "object",
         "properties": {
@@ -24,7 +22,14 @@ class SubfinderTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        return ["subfinder", "-d", args["domain"], "-silent"]
+        return [
+            "subfinder",
+            "-d", args["domain"],
+            "-silent",
+            "-t", "30",
+            "-duc",
+            "-nc",
+        ]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         subdomains = [

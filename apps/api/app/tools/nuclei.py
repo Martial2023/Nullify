@@ -22,8 +22,6 @@ class NucleiTool(SecurityTool):
         "This is the primary vulnerability scanning tool."
     )
     binary = "nuclei"
-    docker_image = "projectdiscovery/nuclei:latest"
-    docker_extra_args = ["-duc", "-nc"]
     parameters = {
         "type": "object",
         "properties": {
@@ -50,6 +48,9 @@ class NucleiTool(SecurityTool):
             "-u", args["target"],
             "-jsonl",
             "-silent",
+            "-timeout", "10",
+            "-duc",
+            "-nc",
         ]
         if severity := args.get("severity"):
             cmd += ["-s", severity]

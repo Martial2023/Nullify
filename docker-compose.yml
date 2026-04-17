@@ -1,0 +1,94 @@
+# ──────────────────────────────────────────────────────────
+# Nullify — docker-compose.yml
+# ──────────────────────────────────────────────────────────
+
+services:
+  # ─── PostgreSQL ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nullify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-nullify}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nullify}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Redis (queue Celery + cache) ────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Security Tools Image (build-only) ──────────────────
+  # Built once so the API can `docker run nullify-tools:latest`
+  tools:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools
+    image: nullify-tools:latest
+    entrypoint: ["echo", "tools image built"]
+    restart: "no"
+
+  # ─── FastAPI Backend ─────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-anthropic/claude-sonnet-4-5}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nullify}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nullify}
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: '["http://localhost:3000","http://web:3000"]'
+    volumes:
+      # Mount Docker socket so the API can launch tool containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      tools:
+        condition: service_completed_successfully
+
+  # ─── Next.js Frontend ───────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nullify}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nullify}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      FASTAPI_URL: http://api:8000
+      UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:

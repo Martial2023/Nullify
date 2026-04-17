@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "anthropic/claude-sonnet-4-5"
 
-    # Database (Next.js gère Prisma, mais on a besoin de l'URL pour lire)
+    # Database
     database_url: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

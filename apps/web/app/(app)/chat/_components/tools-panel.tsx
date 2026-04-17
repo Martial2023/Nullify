@@ -12,8 +12,8 @@ import { StatusBadge } from "@/components/StatusBadge"
 import { SeverityBadge } from "@/components/SeverityBadge"
 import { getScans } from "@/app/(actions)/scan"
 import { getFindings } from "@/app/(actions)/finding"
-import type { Scan, Finding } from "@/types"
-import { Terminal, ShieldAlert, ScrollText } from "lucide-react"
+import type { Scan, Finding, ToolCall } from "@/types"
+import { Terminal, ShieldAlert, ScrollText, Loader2 } from "lucide-react"
 
 const preventClose = (e: Event) => e.preventDefault()
 
@@ -21,10 +21,12 @@ export function ToolsPanel({
   projectId,
   open,
   onOpenChange,
+  liveToolCalls = [],
 }: {
   projectId: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  liveToolCalls?: ToolCall[]
 }) {
   const [scans, setScans] = useState<Scan[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
@@ -49,6 +51,41 @@ export function ToolsPanel({
         </SheetHeader>
 
         <div className="flex flex-col gap-5 overflow-y-auto px-4 pb-4">
+          {liveToolCalls.length > 0 && (
+            <>
+              <section className="space-y-2">
+                <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Live Execution
+                </h3>
+                <div className="space-y-2">
+                  {liveToolCalls.map((tc) => (
+                    <div
+                      key={tc.id}
+                      className="rounded-lg border bg-zinc-950 p-3 font-mono text-xs text-zinc-300"
+                    >
+                      <div className="flex items-center gap-2">
+                        {!tc.result && (
+                          <Loader2 className="size-3 animate-spin text-emerald-400" />
+                        )}
+                        <span className="text-emerald-400">$ {tc.name}</span>
+                        <span className="text-zinc-500 truncate">
+                          {JSON.stringify(tc.args)}
+                        </span>
+                      </div>
+                      {tc.result && (
+                        <pre className="mt-2 max-h-48 overflow-y-auto text-zinc-400 whitespace-pre-wrap">
+                          {tc.result}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <Separator />
+            </>
+          )}
+
           <section className="space-y-2">
             <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase text-muted-foreground">
               <Terminal className="size-3.5" />

@@ -53,6 +53,28 @@ class ChatResponse(BaseModel):
     done: bool = True
 
 
+# ─── SSE Streaming ─────────────────────────────────────────
+
+
+class SSEEventType(str, Enum):
+    THINKING = "thinking"
+    TOOL_START = "tool_start"
+    TOOL_OUTPUT = "tool_output"
+    MESSAGE = "message"
+    ERROR = "error"
+    DONE = "done"
+
+
+class SSEEvent(BaseModel):
+    event: SSEEventType
+    content: str | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
+    args: dict | None = None
+    result: str | None = None
+    tool_calls: list[ToolCall] | None = None
+
+
 # ─── Scan ───────────────────────────────────────────────────
 
 

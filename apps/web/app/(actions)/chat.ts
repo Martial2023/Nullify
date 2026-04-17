@@ -1,9 +1,8 @@
 'use server'
 
 import { getUser } from "@/lib/auth-session"
-import { fastapiClient } from "@/lib/fastapi-client"
 import prisma from "@/lib/prisma"
-import type { ChatSession, ChatSessionWithMessages, Message } from "@/types"
+import type { ChatSession, ChatSessionWithMessages, Message, ToolCall } from "@/types"
 
 export async function getChatSessions(
   projectId: string
@@ -86,50 +85,43 @@ export async function deleteChatSession(sessionId: string) {
   }
 }
 
-export async function sendMessage(
+export async function persistUserMessage(
+  sessionId: string,
+  content: string
+): Promise<void> {
+  try {
+    const user = await getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    await prisma.message.create({
+      data: { role: "USER", content, sessionId },
+    })
+  } catch (error) {
+    console.log("Error while persisting user message:", error)
+    throw new Error("Error while persisting user message")
+  }
+}
+
+export async function persistAssistantMessage(
   sessionId: string,
   content: string,
-  model: string
+  toolCalls?: ToolCall[]
 ): Promise<Message> {
   try {
     const user = await getUser()
     if (!user) throw new Error("User not authenticated")
 
-    const session = await prisma.chatSession.findFirst({
-      where: { id: sessionId, userId: user.id },
-    })
-    if (!session) throw new Error("Session not found")
-
-    // Persist user message
-    await prisma.message.create({
-      data: {
-        role: "USER",
-        content,
-        sessionId,
-      },
-    })
-
-    // Call FastAPI (mock for now)
-    const response = await fastapiClient.chat({
-      message: content,
-      sessionId,
-      projectId: session.projectId,
-      model,
-    })
-
-    // Persist assistant message
     const assistantMessage = await prisma.message.create({
       data: {
         role: "ASSISTANT",
-        content: response.content,
-        toolCalls: response.toolCalls
-          ? (JSON.parse(JSON.stringify(response.toolCalls)) as object)
+        content,
+        toolCalls: toolCalls
+          ? (JSON.parse(JSON.stringify(toolCalls)) as object)
           : undefined,
         sessionId,
       },
     })
 
-    // Update session timestamp
     await prisma.chatSession.update({
       where: { id: sessionId },
       data: { updatedAt: new Date() },
@@ -140,7 +132,7 @@ export async function sendMessage(
       toolCalls: assistantMessage.toolCalls as Message["toolCalls"],
     }
   } catch (error) {
-    console.log("Error while sending message", error)
-    throw new Error("Error while sending message")
+    console.log("Error while persisting assistant message:", error)
+    throw new Error("Error while persisting assistant message")
   }
 }

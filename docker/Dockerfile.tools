@@ -1,0 +1,17 @@
+FROM alpine:3.19
+
+RUN apk add --no-cache nmap nmap-scripts curl unzip ca-certificates bash \
+    && HTTPX_URL=$(curl -sL https://api.github.com/repos/projectdiscovery/httpx/releases/latest \
+       | grep "browser_download_url.*linux_amd64.zip" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$HTTPX_URL" -o /tmp/httpx.zip \
+    && unzip -o /tmp/httpx.zip -d /tmp/httpx && mv /tmp/httpx/httpx /usr/local/bin/ \
+    && SUBFINDER_URL=$(curl -sL https://api.github.com/repos/projectdiscovery/subfinder/releases/latest \
+       | grep "browser_download_url.*linux_amd64.zip" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$SUBFINDER_URL" -o /tmp/subfinder.zip \
+    && unzip -o /tmp/subfinder.zip -d /tmp/subfinder && mv /tmp/subfinder/subfinder /usr/local/bin/ \
+    && NUCLEI_URL=$(curl -sL https://api.github.com/repos/projectdiscovery/nuclei/releases/latest \
+       | grep "browser_download_url.*linux_amd64.zip" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$NUCLEI_URL" -o /tmp/nuclei.zip \
+    && unzip -o /tmp/nuclei.zip -d /tmp/nuclei && mv /tmp/nuclei/nuclei /usr/local/bin/ \
+    && rm -rf /tmp/*.zip /tmp/httpx /tmp/subfinder /tmp/nuclei \
+    && chmod +x /usr/local/bin/httpx /usr/local/bin/subfinder /usr/local/bin/nuclei

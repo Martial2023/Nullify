@@ -1,14 +1,14 @@
-"""LLM service — OpenRouter API with tool_use for security tools."""
+"""LLM service — OpenRouter API with tool_use, SSE streaming."""
 
 import json
+from collections.abc import AsyncGenerator
 
 import httpx
 
 from app.config import settings
-from app.models import ChatResponse, ToolCall
+from app.models import ChatResponse, SSEEvent, SSEEventType, ToolCall
 from app.tools import tool_registry
 
-# Prompt système pour l'agent de sécurité
 SYSTEM_PROMPT = """\
 You are Nullify, an AI Security Engineer. You help users perform security \
 assessments by orchestrating security tools.
@@ -28,7 +28,6 @@ Guidelines:
 - Flag critical and high severity findings prominently.
 """
 
-# Map des modèles frontend → identifiants OpenRouter
 MODEL_MAP: dict[str, str] = {
     "claude-opus-4-5": "anthropic/claude-opus-4",
     "claude-sonnet-4-5": "anthropic/claude-sonnet-4-5",
@@ -42,12 +41,10 @@ MODEL_MAP: dict[str, str] = {
 
 
 def _resolve_model(model_id: str) -> str:
-    """Resolve a frontend model ID to an OpenRouter model ID."""
     return MODEL_MAP.get(model_id, settings.default_model)
 
 
 def _tools_to_openai_format(tools: list[dict]) -> list[dict]:
-    """Convert Anthropic-style tools to OpenAI function-calling format."""
     return [
         {
             "type": "function",
@@ -61,17 +58,13 @@ def _tools_to_openai_format(tools: list[dict]) -> list[dict]:
     ]
 
 
-async def chat_with_tools(
+async def chat_with_tools_stream(
     message: str,
     model: str,
     history: list[dict] | None = None,
-) -> ChatResponse:
-    """Send a message to OpenRouter with security tools available.
+) -> AsyncGenerator[SSEEvent, None]:
+    """Agentic tool-use loop, yielding SSE events as things happen."""
 
-    Handles the full tool_use loop: if the model wants to call a tool,
-    we execute it and feed the result back until the model produces
-    a final text response.
-    """
     raw_tools = tool_registry.to_claude_tools()
     openai_tools = _tools_to_openai_format(raw_tools) if raw_tools else []
     resolved_model = _resolve_model(model)
@@ -83,8 +76,7 @@ async def chat_with_tools(
 
     collected_tool_calls: list[ToolCall] = []
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        # Tool-use agentic loop
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
         while True:
             payload: dict = {
                 "model": resolved_model,
@@ -94,39 +86,76 @@ async def chat_with_tools(
             if openai_tools:
                 payload["tools"] = openai_tools
 
-            resp = await client.post(
-                f"{settings.openrouter_base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "http://localhost:3000",
-                    "X-Title": "Nullify",
-                },
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            try:
+                resp = await client.post(
+                    f"{settings.openrouter_base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.openrouter_api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "http://localhost:3000",
+                        "X-Title": "Nullify",
+                    },
+                    json=payload,
+                )
+                resp.raise_for_status()
+            except Exception as e:
+                yield SSEEvent(event=SSEEventType.ERROR, content=str(e))
+                yield SSEEvent(event=SSEEventType.DONE)
+                return
 
+            data = resp.json()
             choice = data["choices"][0]
             assistant_msg = choice["message"]
             finish_reason = choice.get("finish_reason", "stop")
 
-            # Check if the model wants to call tools
+            # --- Tool calls requested by the LLM ---
             if finish_reason == "tool_calls" or assistant_msg.get("tool_calls"):
+                # If the LLM included reasoning text, stream it
+                if assistant_msg.get("content"):
+                    yield SSEEvent(
+                        event=SSEEventType.THINKING,
+                        content=assistant_msg["content"],
+                    )
+
                 messages.append(assistant_msg)
 
                 for tc in assistant_msg.get("tool_calls", []):
                     fn = tc["function"]
                     tool_name = fn["name"]
-                    tool_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
+                    tool_args = (
+                        json.loads(fn["arguments"])
+                        if isinstance(fn["arguments"], str)
+                        else fn["arguments"]
+                    )
                     tool_id = tc["id"]
 
+                    # Notify: tool is starting
+                    yield SSEEvent(
+                        event=SSEEventType.TOOL_START,
+                        tool_call_id=tool_id,
+                        name=tool_name,
+                        args=tool_args,
+                    )
+
+                    # Execute the tool
                     tool = tool_registry.get(tool_name)
                     if tool:
                         result = await tool.execute(tool_args)
-                        result_text = result.output if result.success else (result.error or "Tool execution failed.")
+                        result_text = (
+                            result.output
+                            if result.success
+                            else (result.error or "Tool execution failed.")
+                        )
                     else:
                         result_text = f"Tool '{tool_name}' is not available."
+
+                    # Notify: tool finished
+                    yield SSEEvent(
+                        event=SSEEventType.TOOL_OUTPUT,
+                        tool_call_id=tool_id,
+                        name=tool_name,
+                        result=result_text[:5000],
+                    )
 
                     collected_tool_calls.append(
                         ToolCall(
@@ -143,13 +172,36 @@ async def chat_with_tools(
                         "content": result_text[:5000],
                     })
 
+                # Loop back to let the LLM process results
                 continue
 
-            # Final text response
+            # --- Final text response ---
             final_text = assistant_msg.get("content", "") or ""
-
-            return ChatResponse(
-                content=final_text,
+            yield SSEEvent(event=SSEEventType.MESSAGE, content=final_text)
+            yield SSEEvent(
+                event=SSEEventType.DONE,
                 tool_calls=collected_tool_calls if collected_tool_calls else None,
-                done=True,
             )
+            return
+
+
+async def chat_with_tools(
+    message: str,
+    model: str,
+    history: list[dict] | None = None,
+) -> ChatResponse:
+    """Non-streaming wrapper — keeps the old POST /api/chat working."""
+    final_content = ""
+    final_tool_calls: list[ToolCall] | None = None
+
+    async for event in chat_with_tools_stream(message, model, history):
+        if event.event == SSEEventType.MESSAGE:
+            final_content = event.content or ""
+        elif event.event == SSEEventType.DONE:
+            final_tool_calls = event.tool_calls
+
+    return ChatResponse(
+        content=final_content,
+        tool_calls=final_tool_calls,
+        done=True,
+    )
