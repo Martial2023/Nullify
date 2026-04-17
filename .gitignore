@@ -102,3 +102,4 @@ apps/api/bin/
 #------ Claude
 .claude/
 nullify-frontend-components
+/bin
