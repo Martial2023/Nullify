@@ -96,6 +96,9 @@ tmp/
 temp/
 
 
+# ---------- Security tool binaries (run via Docker) ----------
+apps/api/bin/
+
 #------ Claude
 .claude/
 nullify-frontend-components
