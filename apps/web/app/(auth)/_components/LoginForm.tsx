@@ -37,7 +37,7 @@ const LoginForm = ({
                             <div className="flex flex-col items-center text-center">
                                 <h1 className="text-2xl font-bold">Connexion</h1>
                                 <p className="text-balance text-muted-foreground">
-                                    Se connecter à Vigicité
+                                    Se connecter à Nullify
                                 </p>
                             </div>
                             <div className="grid gap-2">

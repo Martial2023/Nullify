@@ -43,7 +43,7 @@ app = FastAPI(
 async def root():
     return {
         "message": "Welcome to the Nullify API",
-        "update_msg": "ml"
+        "update_msg": "ml test"
     }
 
 app.add_middleware(
