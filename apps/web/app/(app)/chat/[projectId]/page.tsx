@@ -84,7 +84,15 @@ export default function ChatPage() {
       // 1. Persist user message in DB
       await persistUserMessage(session.id, content)
 
-      // 2. Stream from FastAPI via Next.js proxy
+      // 2. Build history from previous messages (exclude the optimistic user msg)
+      const history = messages
+        .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
+        .map((m) => ({
+          role: m.role === "USER" ? "user" : "assistant",
+          content: m.content,
+        }))
+
+      // 3. Stream from FastAPI via Next.js proxy
       const resp = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -93,6 +101,7 @@ export default function ChatPage() {
           session_id: session.id,
           project_id: project.id,
           model: modelId,
+          history,
         }),
       })
 
@@ -100,7 +109,7 @@ export default function ChatPage() {
         throw new Error(`Stream error: ${resp.status}`)
       }
 
-      // 3. Create placeholder assistant message
+      // 4. Create placeholder assistant message
       const assistantId = crypto.randomUUID()
       const assistantMsg: Message = {
         id: assistantId,
@@ -112,7 +121,7 @@ export default function ChatPage() {
       }
       setMessages((prev) => [...prev, assistantMsg])
 
-      // 4. Read SSE stream
+      // 5. Read SSE stream
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
@@ -204,7 +213,7 @@ export default function ChatPage() {
         }
       }
 
-      // 5. Persist assistant message in DB
+      // 6. Persist assistant message in DB
       const saved = await persistAssistantMessage(
         session.id,
         finalContent,

@@ -14,7 +14,7 @@ import { getScans } from "@/app/(actions)/scan"
 import { getFindings } from "@/app/(actions)/finding"
 import type { Scan, Finding, ToolCall } from "@/types"
 import type { ToolFinding } from "@/types/api"
-import { Terminal, ShieldAlert, ScrollText, Loader2, Globe, Server, Bug, Info } from "lucide-react"
+import { Terminal, ShieldAlert, ScrollText, Loader, Globe, Server, Bug, Info } from "lucide-react"
 
 const preventClose = (e: Event) => e.preventDefault()
 
@@ -96,7 +96,7 @@ export function ToolsPanel({
             <>
               <section className="space-y-2">
                 <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Loader className="size-3.5 animate-spin" />
                   Live Execution
                 </h3>
                 <div className="space-y-2">
@@ -107,7 +107,7 @@ export function ToolsPanel({
                     >
                       <div className="flex items-center gap-2">
                         {!tc.result && (
-                          <Loader2 className="size-3 animate-spin text-emerald-400" />
+                          <Loader className="size-3 animate-spin text-emerald-400" />
                         )}
                         <span className="text-emerald-400">$ {tc.name}</span>
                         <span className="text-zinc-500 truncate">

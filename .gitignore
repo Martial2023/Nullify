@@ -101,5 +101,9 @@ apps/api/bin/
 
 #------ Claude
 .claude/
-nullify-frontend-components
+
+# ---------- Markdown racine (sauf README) ----------
+/*.md
+!/README.md
+
 /bin

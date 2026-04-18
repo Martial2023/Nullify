@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import type { Message } from "@/types"
-import { Bot, Loader2 } from "lucide-react"
+import { Code } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { ThinkingIndicator } from "@/components/ThinkingIndicator"
@@ -22,7 +22,7 @@ function AssistantMessage({ message }: { message: Message }) {
   return (
     <div className="flex gap-3">
       <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-        <Bot className="size-4" />
+        <Code className="size-4" />
       </div>
       <div className="max-w-[75%] space-y-2">
         <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2.5">

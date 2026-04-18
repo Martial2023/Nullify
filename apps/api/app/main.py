@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import chat, health, scan
 
+from app.auth import shutdown_pool
 from app.tools import tool_registry
 from app.tools.httpx_tool import HttpxTool
 from app.tools.nmap import NmapTool
@@ -31,6 +32,7 @@ async def lifespan(_app: FastAPI):
     for t in available:
         print(f"  + {t.name}")
     yield
+    await shutdown_pool()
 
 
 app = FastAPI(

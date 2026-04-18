@@ -1,11 +1,27 @@
+import { cookies } from "next/headers"
+
 const API_BASE = process.env.FASTAPI_URL || "http://localhost:8000"
 
 export async function POST(req: Request) {
+  // Extract Better-Auth session token from cookie
+  const cookieStore = await cookies()
+  const sessionToken = cookieStore.get("better-auth.session_token")?.value
+
+  if (!sessionToken) {
+    return new Response(
+      JSON.stringify({ error: "Not authenticated" }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    )
+  }
+
   const body = await req.json()
 
   const upstream = await fetch(`${API_BASE}/api/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${sessionToken}`,
+    },
     body: JSON.stringify(body),
   })
 

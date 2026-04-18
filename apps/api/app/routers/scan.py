@@ -1,7 +1,8 @@
 """Scan router — POST /api/scan, GET /api/tools"""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth import AuthenticatedUser, get_current_user
 from app.models import ScanRequest, ScanResult, ScanStatus
 from app.tools import tool_registry
 
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/api", tags=["scan"])
 
 
 @router.get("/tools")
-async def list_tools():
+async def list_tools(user: AuthenticatedUser = Depends(get_current_user)):
     """List all registered security tools and their availability."""
     return [
         {
@@ -22,7 +23,10 @@ async def list_tools():
 
 
 @router.post("/scan", response_model=ScanResult)
-async def run_scan(req: ScanRequest) -> ScanResult:
+async def run_scan(
+    req: ScanRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> ScanResult:
     """Execute a security tool scan directly (without AI)."""
     tool = tool_registry.get(req.tool)
     if not tool:

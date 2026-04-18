@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 import httpx
 
 from app.config import settings
-from app.models import ChatResponse, SSEEvent, SSEEventType, ToolCall
+from app.models import ChatResponse, HistoryMessage, SSEEvent, SSEEventType, ToolCall
 from app.tools import tool_registry
 
 SYSTEM_PROMPT = """\
@@ -61,7 +61,7 @@ def _tools_to_openai_format(tools: list[dict]) -> list[dict]:
 async def chat_with_tools_stream(
     message: str,
     model: str,
-    history: list[dict] | None = None,
+    history: list[HistoryMessage] | None = None,
 ) -> AsyncGenerator[SSEEvent, None]:
     """Agentic tool-use loop, yielding SSE events as things happen."""
 
@@ -71,7 +71,9 @@ async def chat_with_tools_stream(
 
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
     if history:
-        messages.extend(history)
+        messages.extend(
+            {"role": h.role.lower(), "content": h.content} for h in history
+        )
     messages.append({"role": "user", "content": message})
 
     collected_tool_calls: list[ToolCall] = []
@@ -191,7 +193,7 @@ async def chat_with_tools_stream(
 async def chat_with_tools(
     message: str,
     model: str,
-    history: list[dict] | None = None,
+    history: list[HistoryMessage] | None = None,
 ) -> ChatResponse:
     """Non-streaming wrapper — keeps the old POST /api/chat working."""
     final_content = ""

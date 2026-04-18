@@ -69,61 +69,10 @@ export function ChatInput({
               <Paperclip className="size-4" />
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 rounded-full px-3 text-xs"
-            >
-              <Bot className="size-3.5" />
-              Agent
-            </Button>
-
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-8 rounded-full text-muted-foreground"
-              aria-label="Suggestions"
-            >
-              <Sparkles className="size-4" />
-            </Button>
-
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-8 rounded-full text-muted-foreground"
-              aria-label="Options"
-            >
-              <SlidersHorizontal className="size-4" />
-            </Button>
-
             <div className="flex items-center gap-1.5 rounded-full border border-border/60 pl-2 pr-1 text-xs text-muted-foreground">
               <span className="hidden md:inline">Select agent</span>
               <ModelSelector value={modelId} onValueChange={onModelChange} />
             </div>
-
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-8 rounded-full text-muted-foreground/60"
-              aria-label="Disabled tool"
-              disabled
-            >
-              <Ban className="size-4" />
-            </Button>
-
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-8 rounded-full text-muted-foreground"
-              aria-label="History"
-            >
-              <Clock className="size-4" />
-            </Button>
           </div>
 
           <div className="flex items-center gap-1">

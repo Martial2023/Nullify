@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import type { ChatRequest, ChatResponse } from "@/types"
 
 const API_BASE = process.env.FASTAPI_URL || "http://localhost:8000"
@@ -6,9 +7,21 @@ async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // Forward Better-Auth session token to FastAPI
+  const cookieStore = await cookies()
+  const sessionToken = cookieStore.get("better-auth.session_token")?.value
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  }
+  if (sessionToken) {
+    headers["Authorization"] = `Bearer ${sessionToken}`
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
     ...options,
+    headers,
   })
 
   if (!res.ok) {

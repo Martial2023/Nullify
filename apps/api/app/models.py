@@ -40,11 +40,17 @@ class ToolCall(BaseModel):
     result: str | None = None
 
 
+class HistoryMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: str
     project_id: str
     model: str = "claude-sonnet-4-5-20250514"
+    history: list[HistoryMessage] | None = None
 
 
 class ChatResponse(BaseModel):
