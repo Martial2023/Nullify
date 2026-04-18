@@ -72,6 +72,7 @@ class SSEEvent(BaseModel):
     name: str | None = None
     args: dict | None = None
     result: str | None = None
+    findings: list[dict] | None = None
     tool_calls: list[ToolCall] | None = None
 
 

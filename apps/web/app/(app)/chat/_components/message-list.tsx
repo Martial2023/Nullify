@@ -18,6 +18,7 @@ function UserMessage({ message }: { message: Message }) {
 }
 
 function AssistantMessage({ message }: { message: Message }) {
+  const hasToolCalls = message.toolCalls && message.toolCalls.length > 0
   return (
     <div className="flex gap-3">
       <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -27,27 +28,11 @@ function AssistantMessage({ message }: { message: Message }) {
         <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2.5">
           <MarkdownRenderer content={message.content} />
         </div>
-        {message.toolCalls?.map((tc) => (
-          <div
-            key={tc.id}
-            className="rounded-lg border bg-zinc-950 p-3 font-mono text-xs text-zinc-300"
-          >
-            <span className="text-emerald-400">$ {tc.name}</span>{" "}
-            <span className="text-zinc-500">
-              {JSON.stringify(tc.args)}
-            </span>
-            {tc.result ? (
-              <pre className="mt-1 max-h-48 overflow-y-auto text-zinc-400 whitespace-pre-wrap">
-                {tc.result}
-              </pre>
-            ) : (
-              <div className="mt-1 flex items-center gap-1.5 text-zinc-500">
-                <Loader2 className="size-3 animate-spin" />
-                <span>Running...</span>
-              </div>
-            )}
-          </div>
-        ))}
+        {hasToolCalls && (
+          <p className="text-xs text-muted-foreground italic">
+            {message.toolCalls!.length} tool(s) executed — see Tools panel for details
+          </p>
+        )}
       </div>
     </div>
   )

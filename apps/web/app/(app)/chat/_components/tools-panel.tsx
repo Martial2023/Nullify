@@ -13,20 +13,61 @@ import { SeverityBadge } from "@/components/SeverityBadge"
 import { getScans } from "@/app/(actions)/scan"
 import { getFindings } from "@/app/(actions)/finding"
 import type { Scan, Finding, ToolCall } from "@/types"
-import { Terminal, ShieldAlert, ScrollText, Loader2 } from "lucide-react"
+import type { ToolFinding } from "@/types/api"
+import { Terminal, ShieldAlert, ScrollText, Loader2, Globe, Server, Bug, Info } from "lucide-react"
 
 const preventClose = (e: Event) => e.preventDefault()
+
+const SEVERITY_COLORS: Record<string, string> = {
+  CRITICAL: "bg-red-600 text-white",
+  HIGH: "bg-orange-600 text-white",
+  MEDIUM: "bg-yellow-600 text-white",
+  LOW: "bg-blue-600 text-white",
+  INFO: "bg-zinc-600 text-white",
+}
+
+const FINDING_ICONS: Record<string, typeof Globe> = {
+  subdomain: Globe,
+  live_host: Server,
+  open_port: Server,
+  vulnerability: Bug,
+}
+
+function FindingLabel({ finding }: { finding: ToolFinding }) {
+  const Icon = FINDING_ICONS[finding.type] ?? Info
+  const severity = finding.severity?.toUpperCase()
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border p-2 text-xs">
+      <Icon className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        {finding.title && <p className="font-medium">{finding.title}</p>}
+        {finding.subdomain && <p className="font-mono text-muted-foreground">{finding.subdomain}</p>}
+        {finding.url && <p className="font-mono text-muted-foreground truncate">{finding.url}</p>}
+        {finding.port && <p className="text-muted-foreground">Port {finding.port} — {finding.service}</p>}
+        {finding.description && <p className="text-muted-foreground line-clamp-2">{finding.description}</p>}
+      </div>
+      {severity && (
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${SEVERITY_COLORS[severity] ?? SEVERITY_COLORS.INFO}`}>
+          {severity}
+        </span>
+      )}
+    </div>
+  )
+}
 
 export function ToolsPanel({
   projectId,
   open,
   onOpenChange,
   liveToolCalls = [],
+  liveFindings = [],
 }: {
   projectId: string
   open: boolean
   onOpenChange: (open: boolean) => void
   liveToolCalls?: ToolCall[]
+  liveFindings?: ToolFinding[]
 }) {
   const [scans, setScans] = useState<Scan[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
@@ -118,9 +159,17 @@ export function ToolsPanel({
           <section className="space-y-2">
             <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase text-muted-foreground">
               <ShieldAlert className="size-3.5" />
-              Findings
+              Findings {liveFindings.length > 0 && (
+                <span className="ml-auto text-emerald-400">{liveFindings.length}</span>
+              )}
             </h3>
-            {findings.length > 0 ? (
+            {liveFindings.length > 0 ? (
+              <div className="space-y-1.5">
+                {liveFindings.map((f, i) => (
+                  <FindingLabel key={`live-${i}`} finding={f} />
+                ))}
+              </div>
+            ) : findings.length > 0 ? (
               <div className="space-y-1.5">
                 {findings.slice(0, 10).map((f) => (
                   <div

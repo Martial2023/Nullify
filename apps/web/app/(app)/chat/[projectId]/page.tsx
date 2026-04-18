@@ -14,7 +14,7 @@ import {
 } from "@/app/(actions)/chat"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import type { Message, ChatSession, Project, ToolCall } from "@/types"
-import type { SSEEvent } from "@/types/api"
+import type { SSEEvent, ToolFinding } from "@/types/api"
 import { MessageList } from "../_components/message-list"
 import { ChatInput } from "../_components/chat-input"
 import { ChatEmptyState } from "../_components/chat-empty-state"
@@ -33,6 +33,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [sending, setSending] = useState<boolean>(false)
   const [liveToolCalls, setLiveToolCalls] = useState<ToolCall[]>([])
+  const [liveFindings, setLiveFindings] = useState<ToolFinding[]>([])
 
   const init = useCallback(async () => {
     try {
@@ -77,6 +78,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMsg])
     setSending(true)
     setLiveToolCalls([])
+    setLiveFindings([])
 
     try {
       // 1. Persist user message in DB
@@ -158,6 +160,7 @@ export default function ChatPage() {
                   args: event.args ?? {},
                 }
                 setLiveToolCalls((prev) => [...prev, tc])
+                setToolsOpen(true)
               }
               break
 
@@ -170,6 +173,9 @@ export default function ChatPage() {
                       : tc
                   )
                 )
+                if (event.findings && event.findings.length > 0) {
+                  setLiveFindings((prev) => [...prev, ...event.findings])
+                }
               }
               break
 
@@ -217,7 +223,6 @@ export default function ChatPage() {
       console.error("Failed to send message:", error)
     } finally {
       setSending(false)
-      setLiveToolCalls([])
     }
   }
 
@@ -287,6 +292,7 @@ export default function ChatPage() {
         open={toolsOpen}
         onOpenChange={setToolsOpen}
         liveToolCalls={liveToolCalls}
+        liveFindings={liveFindings}
       />
     </div>
   )

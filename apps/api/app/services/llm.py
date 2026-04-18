@@ -139,6 +139,7 @@ async def chat_with_tools_stream(
 
                     # Execute the tool
                     tool = tool_registry.get(tool_name)
+                    tool_findings: list[dict] = []
                     if tool:
                         result = await tool.execute(tool_args)
                         result_text = (
@@ -146,6 +147,7 @@ async def chat_with_tools_stream(
                             if result.success
                             else (result.error or "Tool execution failed.")
                         )
+                        tool_findings = result.findings
                     else:
                         result_text = f"Tool '{tool_name}' is not available."
 
@@ -155,6 +157,7 @@ async def chat_with_tools_stream(
                         tool_call_id=tool_id,
                         name=tool_name,
                         result=result_text[:5000],
+                        findings=tool_findings if tool_findings else None,
                     )
 
                     collected_tool_calls.append(

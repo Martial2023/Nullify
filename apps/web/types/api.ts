@@ -41,5 +41,18 @@ export interface SSEEvent {
   name?: string
   args?: Record<string, unknown>
   result?: string
+  findings?: ToolFinding[]
   tool_calls?: ToolCall[]
+}
+
+export interface ToolFinding {
+  type: string
+  title?: string
+  severity?: string
+  subdomain?: string
+  url?: string
+  port?: number
+  service?: string
+  description?: string
+  [key: string]: unknown
 }
