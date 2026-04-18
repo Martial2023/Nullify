@@ -1,0 +1,8 @@
+{
+  "name": "nullify",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  }
+}
