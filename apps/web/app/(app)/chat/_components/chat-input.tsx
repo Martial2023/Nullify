@@ -6,13 +6,8 @@ import { Button } from "@/components/ui/button"
 import { ModelSelector } from "@/components/ModelSelector"
 import {
   ArrowUp,
-  Ban,
-  Bot,
-  Clock,
   Mic,
-  Paperclip,
-  SlidersHorizontal,
-  Sparkles,
+  Paperclip
 } from "lucide-react"
 
 export function ChatInput({

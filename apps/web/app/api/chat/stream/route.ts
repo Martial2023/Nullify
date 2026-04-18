@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth"
 const API_BASE = process.env.FASTAPI_URL || "http://localhost:8000"
 
 export async function POST(req: Request) {
-  // Validate session via Better-Auth (handles cookie name internally)
+  // Validate session via Better-Auth
   const session = await auth.api.getSession({
     headers: await headers(),
   })

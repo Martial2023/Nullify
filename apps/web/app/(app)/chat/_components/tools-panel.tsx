@@ -96,7 +96,11 @@ export function ToolsPanel({
             <>
               <section className="space-y-2">
                 <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase text-muted-foreground">
-                  <Loader className="size-3.5 animate-spin" />
+                  {liveToolCalls.some(tc => !tc.result) ? (
+                    <Loader className="size-3.5 animate-spin" />
+                  ) : (
+                    <Info className="size-3.5 text-muted-foreground" />
+                  )}
                   Live Execution
                 </h3>
                 <div className="space-y-2">
@@ -107,7 +111,7 @@ export function ToolsPanel({
                     >
                       <div className="flex items-center gap-2">
                         {!tc.result && (
-                          <Loader className="size-3 animate-spin text-emerald-400" />
+                          <Loader className="size-3.5 animate-spin" />
                         )}
                         <span className="text-emerald-400">$ {tc.name}</span>
                         <span className="text-zinc-500 truncate">

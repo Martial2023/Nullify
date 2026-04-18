@@ -12,6 +12,11 @@ import {
   persistUserMessage,
   persistAssistantMessage,
 } from "@/app/(actions)/chat"
+import {
+  startScan,
+  updateScanStatus,
+  persistFindings,
+} from "@/app/(actions)/scan"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import type { Message, ChatSession, Project, ToolCall } from "@/types"
 import type { SSEEvent, ToolFinding } from "@/types/api"
@@ -21,6 +26,7 @@ import { ChatEmptyState } from "../_components/chat-empty-state"
 import { ContextPanel } from "../_components/context-panel"
 import { ToolsPanel } from "../_components/tools-panel"
 import MinLoader from "@/components/MinLoader"
+import { toast } from "sonner"
 
 export default function ChatPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -54,6 +60,7 @@ export default function ChatPage() {
       setMessages(full?.messages ?? [])
     } catch (error) {
       console.error("Failed to init chat:", error)
+      toast.error("Failed to load chat session")
     } finally {
       setLoading(false)
     }
@@ -81,7 +88,6 @@ export default function ChatPage() {
     setLiveFindings([])
 
     try {
-      // 1. Persist user message in DB
       await persistUserMessage(session.id, content)
 
       // 2. Build history from previous messages (exclude the optimistic user msg)
@@ -127,6 +133,8 @@ export default function ChatPage() {
       let buffer = ""
       let finalContent = ""
       let collectedToolCalls: ToolCall[] | undefined
+      // Track scans created during this stream for persistence
+      const scanIds = new Map<string, string>() // tool_call_id -> scanId
 
       while (true) {
         const { done, value } = await reader.read()
@@ -170,6 +178,15 @@ export default function ChatPage() {
                 }
                 setLiveToolCalls((prev) => [...prev, tc])
                 setToolsOpen(true)
+
+                // Persist scan in DB as RUNNING
+                const target = (event.args?.target as string) ?? project.targets?.[0] ?? ""
+                startScan(project.id, event.name, target, event.args ?? {})
+                  .then((scan) => {
+                    scanIds.set(event.tool_call_id!, scan.id)
+                    updateScanStatus(scan.id, "RUNNING").catch(console.error)
+                  })
+                  .catch(console.error)
               }
               break
 
@@ -184,6 +201,29 @@ export default function ChatPage() {
                 )
                 if (event.findings && event.findings.length > 0) {
                   setLiveFindings((prev) => [...prev, ...event.findings!])
+
+                  // Persist findings in DB
+                  const scanId = scanIds.get(event.tool_call_id)
+                  if (scanId) {
+                    const dbFindings = event.findings.map((f) => ({
+                      severity: f.severity ?? "INFO",
+                      title: f.title ?? f.type ?? "Finding",
+                      description: f.description ?? JSON.stringify(f),
+                      target: f.subdomain ?? f.url ?? (f.port ? `port ${f.port}` : undefined),
+                      evidence: f.service ?? undefined,
+                    }))
+                    persistFindings(scanId, dbFindings).catch(console.error)
+                  }
+                }
+
+                // Mark scan as COMPLETED
+                const completedScanId = scanIds.get(event.tool_call_id)
+                if (completedScanId) {
+                  updateScanStatus(
+                    completedScanId,
+                    "COMPLETED",
+                    event.result ?? undefined
+                  ).catch(console.error)
                 }
               }
               break
@@ -208,6 +248,11 @@ export default function ChatPage() {
                   m.id === assistantId ? { ...m, content: finalContent } : m
                 )
               )
+              // Mark all in-progress scans as FAILED
+              for (const scanId of scanIds.values()) {
+                updateScanStatus(scanId, "FAILED", undefined, event.content ?? "Unknown error")
+                  .catch(console.error)
+              }
               break
           }
         }
@@ -230,6 +275,7 @@ export default function ChatPage() {
       )
     } catch (error) {
       console.error("Failed to send message:", error)
+      toast.error("Failed to send message")
     } finally {
       setSending(false)
     }
@@ -290,7 +336,7 @@ export default function ChatPage() {
         disabled={sending}
       />
 
-      {/* Side Panels */}
+      
       <ContextPanel
         projectId={projectId}
         open={contextOpen}

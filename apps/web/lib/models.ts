@@ -11,7 +11,7 @@ export const AI_MODELS: AIModel[] = [
   { id: "grok-4-1-fast", name: "Grok 4.1 Fast", provider: "xAI" },
 ]
 
-export const DEFAULT_MODEL_ID = "claude-opus-4-5"
+export const DEFAULT_MODEL_ID = "claude-sonnet-4-5"
 
 export function getModelById(id: string) {
   return AI_MODELS.find((m) => m.id === id)

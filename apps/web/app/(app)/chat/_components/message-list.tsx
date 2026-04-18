@@ -70,7 +70,7 @@ export function MessageList({
   }, [messages.length, isThinking])
 
   return (
-    <div className={cn("flex-1 overflow-y-auto p-4", className)}>
+    <div className={cn("flex-1 overflow-y-auto p-1.5 md:p-4", className)}>
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         {messages.map((m) => {
           const Component = componentMap[m.role]

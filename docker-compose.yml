@@ -1,6 +1,3 @@
-# ──────────────────────────────────────────────────────────
-# Nullify — docker-compose.yml
-# ──────────────────────────────────────────────────────────
 
 services:
   # ─── PostgreSQL ──────────────────────────────────────────
@@ -69,26 +66,21 @@ services:
       tools:
         condition: service_completed_successfully
 
-  # ─── Next.js Frontend ───────────────────────────────────
-  web:
+  # ─── Celery Worker ──────────────────────────────────────
+  worker:
     build:
-      context: ./apps/web
+      context: ./apps/api
       dockerfile: Dockerfile
+    command: celery -A app.celery_app:celery worker --loglevel=info --concurrency=4
     restart: unless-stopped
     environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
       DATABASE_URL: postgresql://${POSTGRES_USER:-nullify}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nullify}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      FASTAPI_URL: http://api:8000
-      UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:-}
-    ports:
-      - "3000:3000"
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
-      api:
-        condition: service_started
-
-volumes:
-  pgdata:
+      tools:
+        condition: service_completed_successfully
