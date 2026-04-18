@@ -1,21 +1,22 @@
-import { cookies } from "next/headers"
+import { headers } from "next/headers"
+import { auth } from "@/lib/auth"
 
 const API_BASE = process.env.FASTAPI_URL || "http://localhost:8000"
 
 export async function POST(req: Request) {
-  // Extract Better-Auth session token from cookie
-  // In production (HTTPS), Better-Auth prefixes with __Secure-
-  const cookieStore = await cookies()
-  const sessionToken =
-    cookieStore.get("better-auth.session_token")?.value ??
-    cookieStore.get("__Secure-better-auth.session_token")?.value
+  // Validate session via Better-Auth (handles cookie name internally)
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  if (!sessionToken) {
+  if (!session?.session) {
     return new Response(
       JSON.stringify({ error: "Not authenticated" }),
       { status: 401, headers: { "Content-Type": "application/json" } }
     )
   }
+
+  const sessionToken = session.session.token
 
   const body = await req.json()
 
