@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = ""
 
+    # Redis / Celery
+    redis_url: str = "redis://localhost:6379/0"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

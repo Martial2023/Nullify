@@ -95,6 +95,7 @@ class ScanRequest(BaseModel):
 
 class ScanResult(BaseModel):
     scan_id: str
+    task_id: str | None = None
     status: ScanStatus
     output: str | None = None
     error: str | None = None

@@ -1,9 +1,12 @@
-"""Scan router — POST /api/scan, GET /api/tools"""
+"""Scan router — POST /api/scan, GET /api/tools, GET /api/scan/{task_id}/status"""
 
+from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import AuthenticatedUser, get_current_user
+from app.celery_app import celery
 from app.models import ScanRequest, ScanResult, ScanStatus
+from app.tasks import execute_tool
 from app.tools import tool_registry
 
 router = APIRouter(prefix="/api", tags=["scan"])
@@ -27,7 +30,10 @@ async def run_scan(
     req: ScanRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> ScanResult:
-    """Execute a security tool scan directly (without AI)."""
+    """Submit a scan to Celery for background execution.
+
+    Returns immediately with PENDING status and a task_id for polling.
+    """
     tool = tool_registry.get(req.tool)
     if not tool:
         raise HTTPException(status_code=404, detail=f"Tool '{req.tool}' not found.")
@@ -38,12 +44,44 @@ async def run_scan(
             detail=f"Tool '{req.tool}' is not installed on the server.",
         )
 
-    result = await tool.execute({"target": req.target, **req.args})
+    task = execute_tool.delay(req.tool, {"target": req.target, **req.args})
 
     return ScanResult(
         scan_id=req.scan_id,
-        status=ScanStatus.COMPLETED if result.success else ScanStatus.FAILED,
-        output=result.output[:10000] if result.output else None,
-        error=result.error,
-        findings=result.findings,
+        task_id=task.id,
+        status=ScanStatus.PENDING,
     )
+
+
+@router.get("/scan/{task_id}/status")
+async def scan_status(
+    task_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Poll the status of a Celery scan task."""
+    result = AsyncResult(task_id, app=celery)
+
+    if result.state == "PENDING":
+        return {"task_id": task_id, "status": "PENDING"}
+
+    if result.state == "RUNNING" or result.state == "STARTED":
+        return {"task_id": task_id, "status": "RUNNING"}
+
+    if result.state == "FAILURE":
+        return {
+            "task_id": task_id,
+            "status": "FAILED",
+            "error": str(result.result),
+        }
+
+    if result.state == "SUCCESS":
+        data = result.result
+        return {
+            "task_id": task_id,
+            "status": "COMPLETED",
+            "output": (data.get("output") or "")[:10000],
+            "error": data.get("error"),
+            "findings": data.get("findings", []),
+        }
+
+    return {"task_id": task_id, "status": result.state}

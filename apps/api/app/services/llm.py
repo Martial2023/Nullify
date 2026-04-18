@@ -1,5 +1,6 @@
 """LLM service — OpenRouter API with tool_use, SSE streaming."""
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 
@@ -7,6 +8,7 @@ import httpx
 
 from app.config import settings
 from app.models import ChatResponse, HistoryMessage, SSEEvent, SSEEventType, ToolCall
+from app.tasks import execute_tool
 from app.tools import tool_registry
 
 SYSTEM_PROMPT = """\
@@ -56,6 +58,40 @@ def _tools_to_openai_format(tools: list[dict]) -> list[dict]:
         }
         for t in tools
     ]
+
+
+async def _execute_tool_celery(
+    tool_name: str, tool_args: dict, timeout: int = 600, poll_interval: float = 2.0
+) -> dict:
+    """Dispatch tool execution to a Celery worker and poll for the result.
+
+    Falls back to direct execution if the Celery broker is unreachable.
+    """
+    try:
+        task: AsyncResult = execute_tool.delay(tool_name, tool_args, timeout)
+    except Exception:
+        # Celery broker down — fallback to direct execution
+        tool = tool_registry.get(tool_name)
+        if tool is None:
+            return {"success": False, "output": "", "error": f"Tool '{tool_name}' not found.", "findings": []}
+        result = await tool.execute(tool_args, timeout=timeout)
+        return {"success": result.success, "output": result.output, "error": result.error, "findings": result.findings}
+
+    elapsed = 0.0
+    while elapsed < timeout + 60:  # extra grace period over task timeout
+        if task.ready():
+            break
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+
+    if not task.ready():
+        task.revoke(terminate=True)
+        return {"success": False, "output": "", "error": f"Task timed out ({timeout}s).", "findings": []}
+
+    if task.failed():
+        return {"success": False, "output": "", "error": str(task.result), "findings": []}
+
+    return task.result
 
 
 async def chat_with_tools_stream(
@@ -139,17 +175,19 @@ async def chat_with_tools_stream(
                         args=tool_args,
                     )
 
-                    # Execute the tool
+                    # Execute the tool via Celery worker
                     tool = tool_registry.get(tool_name)
                     tool_findings: list[dict] = []
                     if tool:
-                        result = await tool.execute(tool_args)
-                        result_text = (
-                            result.output
-                            if result.success
-                            else (result.error or "Tool execution failed.")
+                        result_dict = await _execute_tool_celery(
+                            tool_name, tool_args
                         )
-                        tool_findings = result.findings
+                        result_text = (
+                            result_dict["output"]
+                            if result_dict["success"]
+                            else (result_dict["error"] or "Tool execution failed.")
+                        )
+                        tool_findings = result_dict["findings"]
                     else:
                         result_text = f"Tool '{tool_name}' is not available."
 
