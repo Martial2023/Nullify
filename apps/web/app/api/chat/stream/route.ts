@@ -4,8 +4,11 @@ const API_BASE = process.env.FASTAPI_URL || "http://localhost:8000"
 
 export async function POST(req: Request) {
   // Extract Better-Auth session token from cookie
+  // In production (HTTPS), Better-Auth prefixes with __Secure-
   const cookieStore = await cookies()
-  const sessionToken = cookieStore.get("better-auth.session_token")?.value
+  const sessionToken =
+    cookieStore.get("better-auth.session_token")?.value ??
+    cookieStore.get("__Secure-better-auth.session_token")?.value
 
   if (!sessionToken) {
     return new Response(
