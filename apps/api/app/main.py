@@ -39,6 +39,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to the Nullify API",
+        "update_msg": "ml"
+    }
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
