@@ -174,7 +174,7 @@ export default function ChatPage() {
                   )
                 )
                 if (event.findings && event.findings.length > 0) {
-                  setLiveFindings((prev) => [...prev, ...event.findings])
+                  setLiveFindings((prev) => [...prev, ...event.findings!])
                 }
               }
               break
