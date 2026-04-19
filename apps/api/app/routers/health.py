@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.tools import tool_registry
+from app.agents import agent_registry
 
 router = APIRouter(tags=["health"])
 
@@ -11,9 +12,11 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health():
     available_tools = tool_registry.list_available()
+    agents = agent_registry.list_all()
     return {
         "status": "ok",
         "app": settings.app_name,
         "tools_registered": len(tool_registry.list_all()),
         "tools_available": len(available_tools),
+        "agents_available": len(agents),
     }

@@ -25,7 +25,7 @@ const DeleteProjectModal = ({
     projectId,
     projectName
 }: Props) => {
-    const [isOpen, setIsOpen] = useState(true)
+    const [isOpen, setIsOpen] = useState(false)
     const handleDeleteProject = async (id: string) => {
         try {
 

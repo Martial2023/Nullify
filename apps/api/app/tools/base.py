@@ -138,3 +138,73 @@ class SecurityTool(ABC):
             "description": self.description,
             "input_schema": self.parameters,
         }
+
+
+class SimpleTool(SecurityTool):
+    """Convenience base for tools with straightforward CLI patterns.
+
+    Subclasses only need to set class attributes and optionally override
+    ``build_command`` or ``parse_output`` when the defaults aren't enough.
+    """
+
+    # Override in subclass
+    default_flags: list[str] = []
+    output_format: str = "lines"  # "lines" | "json" | "jsonl"
+    finding_type: str = "result"
+
+    def build_command(self, args: dict) -> list[str]:
+        """Generic command builder: binary + default_flags + args as flags."""
+        cmd: list[str] = [self.binary] + list(self.default_flags)
+        target = args.get("target") or args.get("domain") or args.get("url")
+        extra = {k: v for k, v in args.items() if k not in ("target", "domain", "url")}
+        for key, value in extra.items():
+            if key.startswith("_"):
+                continue
+            flag = f"-{key}" if len(key) == 1 else f"--{key}"
+            if isinstance(value, bool):
+                if value:
+                    cmd.append(flag)
+            else:
+                cmd.extend([flag, str(value)])
+        if target:
+            cmd.append(target)
+        return cmd
+
+    def parse_output(self, raw_output: str) -> list[dict]:
+        if self.output_format == "jsonl":
+            return self._parse_jsonl(raw_output)
+        if self.output_format == "json":
+            return self._parse_json(raw_output)
+        return [
+            {"type": self.finding_type, "data": line.strip()}
+            for line in raw_output.splitlines()
+            if line.strip()
+        ]
+
+    # ── helpers ───────────────────────────────────────────────
+    @staticmethod
+    def _parse_jsonl(raw: str) -> list[dict]:
+        import json as _json
+
+        results: list[dict] = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                results.append(_json.loads(line))
+            except _json.JSONDecodeError:
+                continue
+        return results
+
+    @staticmethod
+    def _parse_json(raw: str) -> list[dict]:
+        import json as _json
+
+        try:
+            data = _json.loads(raw)
+            if isinstance(data, list):
+                return data
+            return [data]
+        except _json.JSONDecodeError:
+            return []

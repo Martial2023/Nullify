@@ -10,27 +10,23 @@ from app.routers import chat, health, scan
 
 from app.auth import shutdown_pool
 from app.tools import tool_registry
-from app.tools.httpx_tool import HttpxTool
-from app.tools.nmap import NmapTool
-from app.tools.nuclei import NucleiTool
-from app.tools.subfinder import SubfinderTool
-
-
-def _register_tools() -> None:
-    tool_registry.register(NmapTool())
-    tool_registry.register(SubfinderTool())
-    tool_registry.register(HttpxTool())
-    tool_registry.register(NucleiTool())
+from app.agents import agent_registry
 
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    _register_tools()
+    tool_registry.discover_and_register()
     available = tool_registry.list_available()
     print(f"[Nullify] {len(tool_registry.list_all())} tools registered, {len(available)} available")
     for t in available:
         print(f"  + {t.name}")
+
+    agent_registry.discover_and_register()
+    agents = agent_registry.list_all()
+    print(f"[Nullify] {len(agents)} agents registered")
+    for a in agents:
+        print(f"  > {a.name}: {a.description[:60]}")
     yield
     await shutdown_pool()
 

@@ -1,0 +1,58 @@
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash curl ca-certificates git unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp/ && /tmp/aws/install \
+    && rm -rf /tmp/aws* || true
+
+# Prowler
+RUN pip3 install --no-cache-dir prowler || true
+
+# ScoutSuite
+RUN pip3 install --no-cache-dir scoutsuite || true
+
+# CloudSploit
+RUN git clone --depth 1 https://github.com/aquasecurity/cloudsploit /opt/cloudsploit || true
+
+# Trivy
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin || true
+
+# Docker Bench
+RUN git clone --depth 1 https://github.com/docker/docker-bench-security /opt/docker-bench-security \
+    && ln -s /opt/docker-bench-security/docker-bench-security.sh /usr/local/bin/docker-bench-security || true
+
+# kube-hunter
+RUN pip3 install --no-cache-dir kube-hunter || true
+
+# kube-bench
+RUN curl -sL "https://github.com/aquasecurity/kube-bench/releases/latest/download/kube-bench_0.8.0_linux_amd64.tar.gz" \
+    -o /tmp/kubebench.tar.gz \
+    && tar xzf /tmp/kubebench.tar.gz -C /usr/local/bin/ kube-bench \
+    && rm /tmp/kubebench.tar.gz || true
+
+# kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl || true
+
+# Helm
+RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash || true
+
+# Checkov
+RUN pip3 install --no-cache-dir checkov || true
+
+# Terrascan
+RUN curl -sL "https://github.com/tenable/terrascan/releases/latest/download/terrascan_Linux_x86_64.tar.gz" \
+    -o /tmp/terrascan.tar.gz \
+    && tar xzf /tmp/terrascan.tar.gz -C /usr/local/bin/ terrascan \
+    && rm /tmp/terrascan.tar.gz || true
+
+# OPA
+RUN curl -sL -o /usr/local/bin/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static \
+    && chmod +x /usr/local/bin/opa || true
+
+# Pacu
+RUN pip3 install --no-cache-dir pacu || true

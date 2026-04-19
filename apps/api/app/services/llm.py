@@ -10,6 +10,8 @@ from app.config import settings
 from app.models import ChatResponse, HistoryMessage, SSEEvent, SSEEventType, ToolCall
 from app.tasks import execute_tool
 from app.tools import tool_registry
+from app.agents import agent_registry
+from app.agents.router import decision_engine
 
 SYSTEM_PROMPT = """\
 You are Nullify, an AI Security Engineer. You help users perform security \
@@ -118,14 +120,40 @@ async def chat_with_tools_stream(
     message: str,
     model: str,
     history: list[HistoryMessage] | None = None,
+    agent: str | None = None,
 ) -> AsyncGenerator[SSEEvent, None]:
     """Agentic tool-use loop, yielding SSE events as things happen."""
 
-    raw_tools = tool_registry.to_claude_tools()
+    # ── Agent resolution ──────────────────────────────────────
+    resolved_agent = None
+    if agent:
+        resolved_agent = agent_registry.get(agent)
+
+    # Auto-route if no explicit agent was chosen
+    if resolved_agent is None:
+        available_agents = agent_registry.list_all()
+        if available_agents:
+            agent_name = await decision_engine.classify_intent(
+                message, history, available_agents,
+            )
+            resolved_agent = agent_registry.get(agent_name)
+
+    # Build system prompt and tool list based on agent
+    if resolved_agent:
+        system_prompt = resolved_agent.get_system_prompt()
+        agent_tool_names = resolved_agent.get_tools()
+        if agent_tool_names:
+            raw_tools = tool_registry.to_claude_tools(agent_tool_names)
+        else:
+            raw_tools = tool_registry.to_claude_tools()
+    else:
+        system_prompt = SYSTEM_PROMPT
+        raw_tools = tool_registry.to_claude_tools()
+
     openai_tools = _tools_to_openai_format(raw_tools) if raw_tools else []
     resolved_model = _resolve_model(model)
 
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
     if history:
         messages.extend(
             {"role": h.role.lower(), "content": h.content} for h in history
@@ -252,12 +280,13 @@ async def chat_with_tools(
     message: str,
     model: str,
     history: list[HistoryMessage] | None = None,
+    agent: str | None = None,
 ) -> ChatResponse:
     """Non-streaming wrapper — keeps the old POST /api/chat working."""
     final_content = ""
     final_tool_calls: list[ToolCall] | None = None
 
-    async for event in chat_with_tools_stream(message, model, history):
+    async for event in chat_with_tools_stream(message, model, history, agent=agent):
         if event.event == SSEEventType.MESSAGE:
             final_content = event.content or ""
         elif event.event == SSEEventType.DONE:

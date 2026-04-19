@@ -1,0 +1,6 @@
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+
+RUN pip3 install --no-cache-dir playwright \
+    && playwright install chromium
+
+WORKDIR /app

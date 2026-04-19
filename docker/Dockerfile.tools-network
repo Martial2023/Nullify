@@ -1,0 +1,47 @@
+FROM alpine:3.19
+
+# Base dependencies
+RUN apk add --no-cache bash curl unzip ca-certificates python3 py3-pip \
+    nmap nmap-scripts traceroute bind-tools whois netcat-openbsd arp-scan \
+    && pip3 install --no-cache-dir --break-system-packages dnspython
+
+# RustScan
+RUN curl -sL "https://github.com/RustScan/RustScan/releases/latest/download/rustscan-2.3.0-x86_64-unknown-linux-musl.tar.gz" \
+    -o /tmp/rustscan.tar.gz \
+    && tar xzf /tmp/rustscan.tar.gz -C /usr/local/bin/ \
+    && rm /tmp/rustscan.tar.gz || true
+
+# Masscan
+RUN apk add --no-cache gcc make musl-dev libpcap-dev git \
+    && git clone --depth 1 https://github.com/robertdavidgraham/masscan /tmp/masscan \
+    && cd /tmp/masscan && make -j$(nproc) && mv bin/masscan /usr/local/bin/ \
+    && rm -rf /tmp/masscan \
+    && apk del gcc make musl-dev git
+
+# Amass
+RUN AMASS_URL=$(curl -sL https://api.github.com/repos/owasp-amass/amass/releases/latest \
+    | grep "browser_download_url.*linux_amd64.zip" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$AMASS_URL" -o /tmp/amass.zip \
+    && unzip -o /tmp/amass.zip -d /tmp/amass \
+    && mv /tmp/amass/amass_*/amass /usr/local/bin/ \
+    && rm -rf /tmp/amass* || true
+
+# Fierce + dnsenum + dnsrecon + theHarvester
+RUN pip3 install --no-cache-dir --break-system-packages \
+    fierce dnsrecon theHarvester
+
+# Enum4linux-ng
+RUN pip3 install --no-cache-dir --break-system-packages enum4linux-ng || true
+
+# SMB tools
+RUN apk add --no-cache samba-client || true
+
+# AutoRecon
+RUN pip3 install --no-cache-dir --break-system-packages autorecon || true
+
+# NetExec (successor to CrackMapExec)
+RUN pip3 install --no-cache-dir --break-system-packages netexec || true
+
+# WhatWeb
+RUN apk add --no-cache ruby \
+    && gem install whatweb --no-doc || true

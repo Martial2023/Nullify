@@ -30,14 +30,78 @@ services:
       timeout: 3s
       retries: 5
 
-  # ─── Security Tools Image (build-only) ──────────────────
-  # Built once so the API can `docker run nullify-tools:latest`
+  # ─── Security Tools Images (build-only) ─────────────────
+  # Built once so the API can `docker run nullify-tools-*:latest`
   tools:
     build:
       context: ./docker
       dockerfile: Dockerfile.tools
     image: nullify-tools:latest
     entrypoint: ["echo", "tools image built"]
+    restart: "no"
+
+  tools-network:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-network
+    image: nullify-tools-network:latest
+    entrypoint: ["echo", "tools-network image built"]
+    restart: "no"
+
+  tools-web:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-web
+    image: nullify-tools-web:latest
+    entrypoint: ["echo", "tools-web image built"]
+    restart: "no"
+
+  tools-auth:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-auth
+    image: nullify-tools-auth:latest
+    entrypoint: ["echo", "tools-auth image built"]
+    restart: "no"
+
+  tools-binary:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-binary
+    image: nullify-tools-binary:latest
+    entrypoint: ["echo", "tools-binary image built"]
+    restart: "no"
+
+  tools-cloud:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-cloud
+    image: nullify-tools-cloud:latest
+    entrypoint: ["echo", "tools-cloud image built"]
+    restart: "no"
+
+  tools-forensics:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-forensics
+    image: nullify-tools-forensics:latest
+    entrypoint: ["echo", "tools-forensics image built"]
+    restart: "no"
+
+  tools-osint:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-osint
+    image: nullify-tools-osint:latest
+    entrypoint: ["echo", "tools-osint image built"]
+    restart: "no"
+
+  tools-browser:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tools-browser
+    image: nullify-tools-browser:latest
+    entrypoint: ["echo", "tools-browser image built"]
     restart: "no"
 
   # ─── FastAPI Backend ─────────────────────────────────────
@@ -65,6 +129,22 @@ services:
         condition: service_healthy
       tools:
         condition: service_completed_successfully
+      tools-network:
+        condition: service_completed_successfully
+      tools-web:
+        condition: service_completed_successfully
+      tools-auth:
+        condition: service_completed_successfully
+      tools-binary:
+        condition: service_completed_successfully
+      tools-cloud:
+        condition: service_completed_successfully
+      tools-forensics:
+        condition: service_completed_successfully
+      tools-osint:
+        condition: service_completed_successfully
+      tools-browser:
+        condition: service_completed_successfully
 
   # ─── Celery Worker ──────────────────────────────────────
   worker:
@@ -84,3 +164,22 @@ services:
         condition: service_healthy
       tools:
         condition: service_completed_successfully
+      tools-network:
+        condition: service_completed_successfully
+      tools-web:
+        condition: service_completed_successfully
+      tools-auth:
+        condition: service_completed_successfully
+      tools-binary:
+        condition: service_completed_successfully
+      tools-cloud:
+        condition: service_completed_successfully
+      tools-forensics:
+        condition: service_completed_successfully
+      tools-osint:
+        condition: service_completed_successfully
+      tools-browser:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

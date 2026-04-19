@@ -1,0 +1,135 @@
+FROM alpine:3.19
+
+# Base dependencies
+RUN apk add --no-cache bash curl unzip ca-certificates python3 py3-pip \
+    perl perl-net-ssleay ruby git gcc musl-dev make
+
+# --- Directory brute-forcing ---
+
+# Gobuster
+RUN GOBUSTER_URL=$(curl -sL https://api.github.com/repos/OJ/gobuster/releases/latest \
+    | grep "browser_download_url.*Linux_x86_64.tar.gz" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$GOBUSTER_URL" -o /tmp/gobuster.tar.gz \
+    && tar xzf /tmp/gobuster.tar.gz -C /usr/local/bin/ gobuster \
+    && rm /tmp/gobuster.tar.gz || true
+
+# Feroxbuster
+RUN curl -sL "https://github.com/epi052/feroxbuster/releases/latest/download/x86_64-linux-feroxbuster.tar.gz" \
+    -o /tmp/ferox.tar.gz \
+    && tar xzf /tmp/ferox.tar.gz -C /usr/local/bin/ \
+    && rm /tmp/ferox.tar.gz || true
+
+# ffuf
+RUN FFUF_URL=$(curl -sL https://api.github.com/repos/ffuf/ffuf/releases/latest \
+    | grep "browser_download_url.*linux_amd64.tar.gz" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$FFUF_URL" -o /tmp/ffuf.tar.gz \
+    && tar xzf /tmp/ffuf.tar.gz -C /usr/local/bin/ ffuf \
+    && rm /tmp/ffuf.tar.gz || true
+
+# Dirsearch
+RUN pip3 install --no-cache-dir --break-system-packages dirsearch || true
+
+# dirb
+RUN apk add --no-cache dirb || true
+
+# --- Crawlers ---
+
+# Katana
+RUN KATANA_URL=$(curl -sL https://api.github.com/repos/projectdiscovery/katana/releases/latest \
+    | grep "browser_download_url.*linux_amd64.zip" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$KATANA_URL" -o /tmp/katana.zip \
+    && unzip -o /tmp/katana.zip -d /tmp/katana && mv /tmp/katana/katana /usr/local/bin/ \
+    && rm -rf /tmp/katana* || true
+
+# hakrawler
+RUN HAKRAWLER_URL=$(curl -sL https://api.github.com/repos/hakluke/hakrawler/releases/latest \
+    | grep "browser_download_url.*linux_amd64" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$HAKRAWLER_URL" -o /usr/local/bin/hakrawler \
+    && chmod +x /usr/local/bin/hakrawler || true
+
+# gau
+RUN GAU_URL=$(curl -sL https://api.github.com/repos/lc/gau/releases/latest \
+    | grep "browser_download_url.*linux_amd64.tar.gz" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$GAU_URL" -o /tmp/gau.tar.gz \
+    && tar xzf /tmp/gau.tar.gz -C /usr/local/bin/ gau \
+    && rm /tmp/gau.tar.gz || true
+
+# waybackurls
+RUN curl -sL "https://github.com/tomnomnom/waybackurls/releases/latest/download/waybackurls-linux-amd64-0.1.0.tgz" \
+    -o /tmp/wayback.tgz && tar xzf /tmp/wayback.tgz -C /usr/local/bin/ && rm /tmp/wayback.tgz || true
+
+# --- Vuln scanners ---
+
+# Nikto
+RUN git clone --depth 1 https://github.com/sullo/nikto /opt/nikto \
+    && ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto || true
+
+# SQLMap
+RUN pip3 install --no-cache-dir --break-system-packages sqlmap
+
+# WPScan
+RUN gem install wpscan --no-doc || true
+
+# --- XSS & Injection ---
+
+# Dalfox
+RUN DALFOX_URL=$(curl -sL https://api.github.com/repos/hahwul/dalfox/releases/latest \
+    | grep "browser_download_url.*linux_amd64.tar.gz" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$DALFOX_URL" -o /tmp/dalfox.tar.gz \
+    && tar xzf /tmp/dalfox.tar.gz -C /usr/local/bin/ dalfox \
+    && rm /tmp/dalfox.tar.gz || true
+
+# Commix
+RUN pip3 install --no-cache-dir --break-system-packages commix || true
+
+# Arjun
+RUN pip3 install --no-cache-dir --break-system-packages arjun
+
+# --- SSL/TLS ---
+
+# testssl.sh
+RUN git clone --depth 1 https://github.com/drwetter/testssl.sh /opt/testssl \
+    && ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl || true
+
+# sslscan
+RUN apk add --no-cache sslscan || true
+
+# sslyze
+RUN pip3 install --no-cache-dir --break-system-packages sslyze || true
+
+# --- WAF & Fingerprinting ---
+
+# wafw00f
+RUN pip3 install --no-cache-dir --break-system-packages wafw00f
+
+# whatweb
+RUN apk add --no-cache ruby && gem install whatweb --no-doc || true
+
+# --- Fuzzing & URL utils ---
+
+# wfuzz
+RUN pip3 install --no-cache-dir --break-system-packages wfuzz || true
+
+# CRLFuzz
+RUN CRLFUZZ_URL=$(curl -sL https://api.github.com/repos/dwisiswant0/crlfuzz/releases/latest \
+    | grep "browser_download_url.*linux_amd64.tar.gz" | head -1 | cut -d '"' -f 4) \
+    && curl -sL "$CRLFUZZ_URL" -o /tmp/crlfuzz.tar.gz \
+    && tar xzf /tmp/crlfuzz.tar.gz -C /usr/local/bin/ crlfuzz \
+    && rm /tmp/crlfuzz.tar.gz || true
+
+# qsreplace + anew
+RUN curl -sL "https://github.com/tomnomnom/qsreplace/releases/latest/download/qsreplace-linux-amd64-0.0.3.tgz" \
+    -o /tmp/qsreplace.tgz && tar xzf /tmp/qsreplace.tgz -C /usr/local/bin/ && rm /tmp/qsreplace.tgz || true
+RUN curl -sL "https://github.com/tomnomnom/anew/releases/latest/download/anew-linux-amd64-0.1.1.tgz" \
+    -o /tmp/anew.tgz && tar xzf /tmp/anew.tgz -C /usr/local/bin/ && rm /tmp/anew.tgz || true
+
+# uro
+RUN pip3 install --no-cache-dir --break-system-packages uro || true
+
+# --- Wordlists ---
+RUN mkdir -p /usr/share/wordlists/dirb \
+    && curl -sL "https://raw.githubusercontent.com/daviddias/node-dirbuster/master/lists/directory-list-2.3-medium.txt" \
+       -o /usr/share/wordlists/dirb/common.txt || true
+
+# Cleanup
+RUN apk del gcc musl-dev make git 2>/dev/null; rm -rf /tmp/* /var/cache/apk/*

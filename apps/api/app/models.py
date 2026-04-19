@@ -51,6 +51,7 @@ class ChatRequest(BaseModel):
     project_id: str
     model: str = "claude-sonnet-4-5-20250514"
     history: list[HistoryMessage] | None = None
+    agent: str | None = None
 
 
 class ChatResponse(BaseModel):
