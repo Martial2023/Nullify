@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button"
 import { PanelLeft, PanelRight } from "lucide-react"
 import { createProject } from "@/app/(actions)/project"
 import { createChatSession, persistUserMessage, persistAssistantMessage } from "@/app/(actions)/chat"
+import { startScan, updateScanStatus, persistFindings } from "@/app/(actions)/scan"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
-import type { Message } from "@/types"
-import type { SSEEvent } from "@/types/api"
+import type { Message, ToolCall } from "@/types"
+import type { SSEEvent, ToolFinding } from "@/types/api"
 import { MessageList } from "../_components/message-list"
 import { ChatInput } from "../_components/chat-input"
 import { ChatEmptyState } from "../_components/chat-empty-state"
+import { ToolsPanel } from "../_components/tools-panel"
 
 function generateProjectName(message: string): string {
   const cleaned = message.replace(/\s+/g, " ").trim()
@@ -24,6 +26,11 @@ export default function NewChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID)
   const [sending, setSending] = useState(false)
+  const [liveToolCalls, setLiveToolCalls] = useState<ToolCall[]>([])
+  const [liveFindings, setLiveFindings] = useState<ToolFinding[]>([])
+  const [toolsOpen, setToolsOpen] = useState(false)
+  // Store projectId once created so ToolsPanel can use it
+  const [projectId, setProjectId] = useState<string | null>(null)
 
   const handleSend = async (content: string) => {
     // Show user message immediately
@@ -37,12 +44,15 @@ export default function NewChatPage() {
     }
     setMessages((prev) => [...prev, userMsg])
     setSending(true)
+    setLiveToolCalls([])
+    setLiveFindings([])
 
     try {
       // 1. Create project + session
       const project = await createProject({
         name: generateProjectName(content),
       })
+      setProjectId(project.id)
       const session = await createChatSession(project.id, generateProjectName(content))
 
       // 2. Persist user message
@@ -83,7 +93,8 @@ export default function NewChatPage() {
       const decoder = new TextDecoder()
       let buffer = ""
       let finalContent = ""
-      let collectedToolCalls: Message["toolCalls"] | undefined
+      let collectedToolCalls: ToolCall[] | undefined
+      const scanIds = new Map<string, string>()
 
       while (true) {
         const { done, value } = await reader.read()
@@ -105,26 +116,96 @@ export default function NewChatPage() {
             continue
           }
 
-          if (event.event === "message" || event.event === "thinking") {
-            if (event.event === "message") {
+          switch (event.event) {
+            case "thinking":
+              if (event.content) {
+                finalContent += event.content
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId ? { ...m, content: finalContent } : m
+                  )
+                )
+              }
+              break
+
+            case "tool_start":
+              if (event.tool_call_id && event.name) {
+                const tc: ToolCall = {
+                  id: event.tool_call_id,
+                  name: event.name,
+                  args: event.args ?? {},
+                }
+                setLiveToolCalls((prev) => [...prev, tc])
+                setToolsOpen(true)
+
+                const target = (event.args?.target as string) ?? ""
+                startScan(project.id, event.name, target, event.args ?? {})
+                  .then((scan) => {
+                    scanIds.set(event.tool_call_id!, scan.id)
+                    updateScanStatus(scan.id, "RUNNING").catch(console.error)
+                  })
+                  .catch(console.error)
+              }
+              break
+
+            case "tool_output":
+              if (event.tool_call_id) {
+                setLiveToolCalls((prev) =>
+                  prev.map((tc) =>
+                    tc.id === event.tool_call_id
+                      ? { ...tc, result: event.result ?? "" }
+                      : tc
+                  )
+                )
+                if (event.findings && event.findings.length > 0) {
+                  setLiveFindings((prev) => [...prev, ...event.findings!])
+
+                  const scanId = scanIds.get(event.tool_call_id)
+                  if (scanId) {
+                    const dbFindings = event.findings.map((f) => ({
+                      severity: f.severity ?? "INFO",
+                      title: f.title ?? f.type ?? "Finding",
+                      description: f.description ?? JSON.stringify(f),
+                      target: f.subdomain ?? f.url ?? (f.port ? `port ${f.port}` : undefined),
+                      evidence: f.service ?? undefined,
+                    }))
+                    persistFindings(scanId, dbFindings).catch(console.error)
+                  }
+                }
+
+                const completedScanId = scanIds.get(event.tool_call_id)
+                if (completedScanId) {
+                  updateScanStatus(completedScanId, "COMPLETED", event.result ?? undefined)
+                    .catch(console.error)
+                }
+              }
+              break
+
+            case "message":
               finalContent = event.content ?? ""
-            } else {
-              finalContent += event.content ?? ""
-            }
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, content: finalContent } : m
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: finalContent } : m
+                )
               )
-            )
-          } else if (event.event === "done") {
-            collectedToolCalls = event.tool_calls ?? undefined
-          } else if (event.event === "error") {
-            finalContent = `Error: ${event.content ?? "Unknown error"}`
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, content: finalContent } : m
+              break
+
+            case "done":
+              collectedToolCalls = event.tool_calls ?? undefined
+              break
+
+            case "error":
+              finalContent = `Error: ${event.content ?? "Unknown error"}`
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: finalContent } : m
+                )
               )
-            )
+              for (const scanId of scanIds.values()) {
+                updateScanStatus(scanId, "FAILED", undefined, event.content ?? "Unknown error")
+                  .catch(console.error)
+              }
+              break
           }
         }
       }
@@ -143,13 +224,18 @@ export default function NewChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col">
-      <div className="flex items-center justify-between px-4 py-2">
+      <div className="flex items-center justify-between border-b px-4 py-2">
         <Button variant="ghost" size="sm" disabled className="gap-1.5">
           <PanelLeft className="size-4" />
           <span className="hidden sm:inline">Context</span>
         </Button>
         <span className="text-sm font-medium">New Chat</span>
-        <Button variant="ghost" size="sm" disabled className="gap-1.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setToolsOpen((o) => !o)}
+          className="gap-1.5"
+        >
           <span className="hidden sm:inline">Tools</span>
           <PanelRight className="size-4" />
         </Button>
@@ -158,7 +244,7 @@ export default function NewChatPage() {
       {messages.length === 0 ? (
         <ChatEmptyState onQuickAction={handleSend} />
       ) : (
-        <MessageList messages={messages} />
+        <MessageList messages={messages} isThinking={sending} />
       )}
 
       <ChatInput
@@ -166,6 +252,14 @@ export default function NewChatPage() {
         modelId={modelId}
         onModelChange={setModelId}
         disabled={sending}
+      />
+
+      <ToolsPanel
+        projectId={projectId ?? ""}
+        open={toolsOpen}
+        onOpenChange={setToolsOpen}
+        liveToolCalls={liveToolCalls}
+        liveFindings={liveFindings}
       />
     </div>
   )

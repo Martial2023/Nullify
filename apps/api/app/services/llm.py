@@ -60,25 +60,45 @@ def _tools_to_openai_format(tools: list[dict]) -> list[dict]:
     ]
 
 
+async def _execute_tool_direct(tool_name: str, tool_args: dict, timeout: int = 600) -> dict:
+    """Execute a tool directly (no Celery)."""
+    tool = tool_registry.get(tool_name)
+    if tool is None:
+        return {"success": False, "output": "", "error": f"Tool '{tool_name}' not found.", "findings": []}
+    result = await tool.execute(tool_args, timeout=timeout)
+    return {"success": result.success, "output": result.output, "error": result.error, "findings": result.findings}
+
+
+def _celery_workers_available() -> bool:
+    """Check if at least one Celery worker is online. Returns False on any error."""
+    try:
+        from app.celery_app import celery as celery_app
+        inspect = celery_app.control.inspect(timeout=2.0)
+        ping = inspect.ping()
+        return bool(ping)
+    except Exception:
+        return False
+
+
 async def _execute_tool_celery(
     tool_name: str, tool_args: dict, timeout: int = 600, poll_interval: float = 2.0
 ) -> dict:
     """Dispatch tool execution to a Celery worker and poll for the result.
 
-    Falls back to direct execution if the Celery broker is unreachable.
+    Falls back to direct execution if no Celery worker is available.
     """
+    # Check if workers are online before dispatching
+    has_workers = await asyncio.to_thread(_celery_workers_available)
+    if not has_workers:
+        return await _execute_tool_direct(tool_name, tool_args, timeout)
+
     try:
         task: AsyncResult = execute_tool.delay(tool_name, tool_args, timeout)
     except Exception:
-        # Celery broker down — fallback to direct execution
-        tool = tool_registry.get(tool_name)
-        if tool is None:
-            return {"success": False, "output": "", "error": f"Tool '{tool_name}' not found.", "findings": []}
-        result = await tool.execute(tool_args, timeout=timeout)
-        return {"success": result.success, "output": result.output, "error": result.error, "findings": result.findings}
+        return await _execute_tool_direct(tool_name, tool_args, timeout)
 
     elapsed = 0.0
-    while elapsed < timeout + 60:  # extra grace period over task timeout
+    while elapsed < timeout + 60:
         if task.ready():
             break
         await asyncio.sleep(poll_interval)

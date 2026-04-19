@@ -9,6 +9,7 @@ import { FindingsFilters } from "./_components/findings-filters"
 import { FindingsTable } from "./_components/findings-table"
 import { SearchX } from "lucide-react"
 import type { Finding, Severity, FindingStatus } from "@/types"
+import MinLoader from "@/components/MinLoader"
 
 const PAGE_SIZE = 10
 
@@ -55,8 +56,9 @@ export default function FindingsPage() {
         onStatusChange={(v) => { setStatus(v); setPage(1) }}
       />
       {loading ? (
-        <div className="flex justify-center py-16">
-          <LoadingSpinner size="lg" />
+        <div className='flex flex-col items-center justify-center h-96'>
+          <MinLoader />
+          <p>Chargement...</p>
         </div>
       ) : paginated.length > 0 ? (
         <>

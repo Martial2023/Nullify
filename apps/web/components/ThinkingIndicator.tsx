@@ -1,12 +1,12 @@
 "use client"
 
-import { Bot } from "lucide-react"
+import { Code } from "lucide-react"
 
 export function ThinkingIndicator() {
   return (
     <div className="flex gap-3">
       <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-        <Bot className="size-4" />
+        <Code className="size-4" />
       </div>
       <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-muted px-4 py-3">
         <div className="flex items-center gap-1">
@@ -24,7 +24,7 @@ export function ThinkingIndicator() {
           />
         </div>
         <span className="text-xs text-muted-foreground">
-          Nullify analyse...
+          Nullify ...
         </span>
       </div>
     </div>
