@@ -41,7 +41,7 @@ app = FastAPI(
 async def root():
     return {
         "message": "Welcome to the Nullify API",
-        "update_msg": "ml test"
+        "update_msg": "fix du déploiement échoué de: ajout d'outils de sécurité + 14 agents spécialiste"
     }
 
 app.add_middleware(
