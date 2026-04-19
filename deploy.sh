@@ -64,12 +64,11 @@ for entry in "${TOOL_IMAGES[@]}"; do
 
   if [[ ! -f "${DOCKER_DIR}/${DOCKERFILE}" ]]; then
     log "  ⚠ ${DOCKERFILE} non trouvé, skip"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
     continue
   fi
 
   # Rebuild si l'image n'existe pas ou si le Dockerfile a changé
-  # depuis le dernier build (comparaison par date de modification)
   NEEDS_BUILD=0
   if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     NEEDS_BUILD=1
@@ -81,14 +80,14 @@ for entry in "${TOOL_IMAGES[@]}"; do
     log "  Building ${IMAGE} (${DOCKERFILE})..."
     if docker build -t "${IMAGE}" -f "${DOCKER_DIR}/${DOCKERFILE}" "${DOCKER_DIR}" 2>&1 | tail -5; then
       log "  ✓ ${IMAGE}"
-      ((BUILT++))
+      BUILT=$((BUILT + 1))
     else
       log "  ✗ ${IMAGE} — build échoué, skip"
-      ((FAILED++))
+      FAILED=$((FAILED + 1))
     fi
   else
     log "  ${IMAGE} déjà présente, skip (FORCE_REBUILD=1 pour rebuild)"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
   fi
 done
 

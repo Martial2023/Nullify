@@ -58,24 +58,24 @@ for key in "${!IMAGES[@]}"; do
 
   if [[ ! -f "${DOCKER_DIR}/${DOCKERFILE}" ]]; then
     echo "[deploy-tools] ⚠ ${DOCKERFILE} non trouvé, skip"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
     continue
   fi
 
   # Skip si l'image existe déjà et pas --force
   if [[ $FORCE -eq 0 ]] && docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     echo "[deploy-tools] ${IMAGE} déjà présente, skip"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
     continue
   fi
 
   echo "[deploy-tools] Building ${IMAGE}..."
   if docker build -t "${IMAGE}" -f "${DOCKER_DIR}/${DOCKERFILE}" "${DOCKER_DIR}"; then
     echo "[deploy-tools] ✓ ${IMAGE}"
-    ((BUILT++))
+    BUILT=$((BUILT + 1))
   else
     echo "[deploy-tools] ✗ ${IMAGE} — échec du build"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
   fi
 done
 
