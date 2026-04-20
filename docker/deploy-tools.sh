@@ -86,3 +86,29 @@ echo "[deploy-tools] Résultat: ${BUILT} buildées, ${SKIPPED} skippées, ${FAIL
 echo ""
 echo "[deploy-tools] Images Docker Nullify disponibles :"
 docker images --filter "reference=nullify-tools*" --format "  {{.Repository}}:{{.Tag}} ({{.Size}})" 2>/dev/null || true
+
+# Smoke test: verify key binaries exist in each image
+echo ""
+echo "[deploy-tools] Vérification des binaires clés :"
+declare -A SMOKE_TESTS=(
+  ["nullify-tools:latest"]="nmap nuclei httpx subfinder"
+  ["nullify-tools-network:latest"]="nmap masscan amass fierce"
+  ["nullify-tools-web:latest"]="gobuster ffuf katana nikto sqlmap whatweb"
+  ["nullify-tools-auth:latest"]="hydra john hashid"
+  ["nullify-tools-binary:latest"]="gdb binwalk checksec strings"
+)
+
+for image in "${!SMOKE_TESTS[@]}"; do
+  if ! docker image inspect "${image}" >/dev/null 2>&1; then
+    continue
+  fi
+  binaries="${SMOKE_TESTS[$image]}"
+  echo "  ${image}:"
+  for bin in ${binaries}; do
+    if docker run --rm "${image}" which "${bin}" >/dev/null 2>&1; then
+      echo "    ✓ ${bin}"
+    else
+      echo "    ✗ ${bin} NOT FOUND"
+    fi
+  done
+done

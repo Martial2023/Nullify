@@ -112,17 +112,32 @@ class SecurityTool(ABC):
 
             print(f"[{self.name}] DONE — timed_out={timed_out} returncode={proc.returncode} stdout={len(raw)}ch")
             if err.strip():
-                print(f"[{self.name}] STDERR: {err[:200]}")
+                print(f"[{self.name}] STDERR: {err[:500]}")
 
             if timed_out and not raw.strip():
                 return ToolResult(
                     success=False, output="",
-                    error=f"Tool execution timed out ({timeout}s).",
+                    error=f"Tool execution timed out after {timeout}s. The tool may need more time or the target may be unresponsive.",
                 )
 
             if proc.returncode != 0 and not raw.strip() and not timed_out:
-                return ToolResult(success=False, output=raw, error=err)
+                # Provide actionable error messages for common Docker failures
+                clean_err = err.strip()
+                if "executable file not found" in clean_err:
+                    binary = clean_err.split('"')[-2] if '"' in clean_err else self.binary
+                    return ToolResult(
+                        success=False, output="",
+                        error=f"Tool binary '{binary}' not found in Docker image '{self.docker_image}'. The image may need to be rebuilt.",
+                    )
+                if "No such image" in clean_err or "not found" in clean_err.lower() and "manifest" in clean_err.lower():
+                    return ToolResult(
+                        success=False, output="",
+                        error=f"Docker image '{self.docker_image}' not found. Run: docker build -t {self.docker_image} ...",
+                    )
+                return ToolResult(success=False, output=raw, error=clean_err[:2000])
 
+            # Even if returncode != 0, try to parse if we got output
+            # (many security tools exit non-zero when they find issues)
             findings = self.parse_output(raw)
             return ToolResult(success=True, output=raw, findings=findings)
 

@@ -20,7 +20,6 @@ NULLIFY_ROOT="${NULLIFY_ROOT:-/home/dev/Nullify}"
 SERVICE_NAME="${SERVICE_NAME:-nullify-api}"
 API_DIR="${NULLIFY_ROOT}/apps/api"
 VENV_DIR="${API_DIR}/.venv"
-DOCKER_DIR="${NULLIFY_ROOT}/docker"
 
 log() { echo "[deploy] $*"; }
 
@@ -29,7 +28,7 @@ log "1/5 Python dépendances"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
   log "  Création du venv…"
-  python3.11 -m venv "${VENV_DIR}"
+  python3 -m venv "${VENV_DIR}"
 fi
 
 # shellcheck disable=SC1091
@@ -40,58 +39,7 @@ deactivate
 
 # ─── 2. Build des images Docker de sécurité ──────────────────
 log "2/5 Build des images Docker de sécurité"
-
-# Liste des images à construire : nom_image:dockerfile
-TOOL_IMAGES=(
-  "nullify-tools:Dockerfile.tools"
-  "nullify-tools-network:Dockerfile.tools-network"
-  "nullify-tools-web:Dockerfile.tools-web"
-  "nullify-tools-auth:Dockerfile.tools-auth"
-  "nullify-tools-binary:Dockerfile.tools-binary"
-  "nullify-tools-cloud:Dockerfile.tools-cloud"
-  "nullify-tools-forensics:Dockerfile.tools-forensics"
-  "nullify-tools-osint:Dockerfile.tools-osint"
-  "nullify-tools-browser:Dockerfile.tools-browser"
-)
-
-BUILT=0
-FAILED=0
-SKIPPED=0
-
-for entry in "${TOOL_IMAGES[@]}"; do
-  IMAGE="${entry%%:*}:latest"
-  DOCKERFILE="${entry##*:}"
-
-  if [[ ! -f "${DOCKER_DIR}/${DOCKERFILE}" ]]; then
-    log "  ⚠ ${DOCKERFILE} non trouvé, skip"
-    SKIPPED=$((SKIPPED + 1))
-    continue
-  fi
-
-  # Rebuild si l'image n'existe pas ou si le Dockerfile a changé
-  NEEDS_BUILD=0
-  if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
-    NEEDS_BUILD=1
-  elif [[ "${FORCE_REBUILD:-0}" == "1" ]]; then
-    NEEDS_BUILD=1
-  fi
-
-  if [[ ${NEEDS_BUILD} -eq 1 ]]; then
-    log "  Building ${IMAGE} (${DOCKERFILE})..."
-    if docker build -t "${IMAGE}" -f "${DOCKER_DIR}/${DOCKERFILE}" "${DOCKER_DIR}" 2>&1 | tail -5; then
-      log "  ✓ ${IMAGE}"
-      BUILT=$((BUILT + 1))
-    else
-      log "  ✗ ${IMAGE} — build échoué, skip"
-      FAILED=$((FAILED + 1))
-    fi
-  else
-    log "  ${IMAGE} déjà présente, skip (FORCE_REBUILD=1 pour rebuild)"
-    SKIPPED=$((SKIPPED + 1))
-  fi
-done
-
-log "  Résultat: ${BUILT} buildées, ${SKIPPED} skippées, ${FAILED} échouées"
+bash "${NULLIFY_ROOT}/docker/deploy-tools.sh" || log "  ⚠ Certaines images ont échoué (non bloquant)"
 
 # ─── 3. Override systemd (PATH) ─────────────────────────────
 log "3/5 Override systemd"
@@ -138,7 +86,7 @@ if [[ "${HEALTH}" == "FAILED" ]]; then
   exit 1
 fi
 
-# Extraire tools_available et agents_available du JSON
+# Extraire les infos du JSON
 TOOLS_OK=$(echo "${HEALTH}" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('tools_available',0))")
 AGENTS_OK=$(echo "${HEALTH}" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('agents_available',0))" 2>/dev/null || echo "?")
 

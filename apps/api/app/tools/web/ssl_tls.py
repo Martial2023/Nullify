@@ -25,7 +25,11 @@ class TestsslTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        cmd = ["testssl", "--jsonfile", "/dev/stdout", "--quiet"]
+        cmd = [
+            "testssl", "--jsonfile", "/dev/stdout",
+            "--quiet", "--color", "0",
+            "--sneaky",  # use less aggressive connection settings
+        ]
         if args.get("full", True):
             cmd.append("--full")
         cmd.append(args["target"])

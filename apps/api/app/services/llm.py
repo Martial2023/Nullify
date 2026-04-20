@@ -161,9 +161,23 @@ async def chat_with_tools_stream(
     messages.append({"role": "user", "content": message})
 
     collected_tool_calls: list[ToolCall] = []
+    MAX_TOOL_ROUNDS = 15  # prevent infinite tool loops
+    tool_round = 0
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
         while True:
+            # Safety: cap the number of tool-call rounds
+            if tool_round >= MAX_TOOL_ROUNDS:
+                yield SSEEvent(
+                    event=SSEEventType.MESSAGE,
+                    content="J'ai atteint la limite de cycles d'outils. Voici un résumé de ce que j'ai trouvé jusqu'ici.",
+                )
+                yield SSEEvent(
+                    event=SSEEventType.DONE,
+                    tool_calls=collected_tool_calls if collected_tool_calls else None,
+                )
+                return
+
             payload: dict = {
                 "model": resolved_model,
                 "messages": messages,
@@ -190,12 +204,20 @@ async def chat_with_tools_stream(
                 return
 
             data = resp.json()
-            choice = data["choices"][0]
-            assistant_msg = choice["message"]
+            choices = data.get("choices")
+            if not choices:
+                yield SSEEvent(event=SSEEventType.ERROR, content="No response from LLM.")
+                yield SSEEvent(event=SSEEventType.DONE)
+                return
+
+            choice = choices[0]
+            assistant_msg = choice.get("message", {})
             finish_reason = choice.get("finish_reason", "stop")
 
             # --- Tool calls requested by the LLM ---
             if finish_reason == "tool_calls" or assistant_msg.get("tool_calls"):
+                tool_round += 1
+
                 # If the LLM included reasoning text, stream it
                 if assistant_msg.get("content"):
                     yield SSEEvent(
@@ -235,7 +257,7 @@ async def chat_with_tools_stream(
                             if result_dict["success"]
                             else (result_dict["error"] or "Tool execution failed.")
                         )
-                        tool_findings = result_dict["findings"]
+                        tool_findings = result_dict.get("findings", [])
                     else:
                         result_text = f"Tool '{tool_name}' is not available."
 

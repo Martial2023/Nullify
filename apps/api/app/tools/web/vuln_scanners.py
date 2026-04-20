@@ -26,7 +26,12 @@ class NiktoTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        cmd = ["nikto", "-h", args["target"], "-Format", "json", "-output", "/dev/stdout"]
+        cmd = [
+            "perl", "/opt/nikto/program/nikto.pl",
+            "-h", args["target"],
+            "-Format", "json", "-output", "/dev/stdout",
+            "-nointeractive",
+        ]
         if tuning := args.get("tuning"):
             cmd.extend(["-Tuning", tuning])
         return cmd

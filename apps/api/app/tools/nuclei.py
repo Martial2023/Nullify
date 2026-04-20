@@ -49,8 +49,8 @@ class NucleiTool(SecurityTool):
             "-jsonl",
             "-silent",
             "-timeout", "10",
-            "-duc",
             "-nc",
+            "-as",  # automatic scan — auto-selects templates based on technology
         ]
         if severity := args.get("severity"):
             cmd += ["-s", severity]
