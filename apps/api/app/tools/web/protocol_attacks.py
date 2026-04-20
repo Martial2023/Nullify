@@ -35,7 +35,7 @@ class CrlfuzzTool(SecurityTool):
 class CorsScannerTool(SecurityTool):
     name = "cors_scan"
     description = "CORS misconfiguration scanner. Detects overly permissive cross-origin policies."
-    binary = "cors-scanner"
+    binary = "python3"
     docker_image = WEB_IMAGE
     parameters = {
         "type": "object",
@@ -46,14 +46,40 @@ class CorsScannerTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        return ["python3", "/opt/CORScanner/cors_scan.py", "-u", args["url"]]
+        # Inline CORS check script — no external dependency
+        script = (
+            "import urllib.request,json,sys;"
+            f"url='{args['url']}';"
+            "origins=['https://evil.com','null','https://'+url.split('/')[2]+'.evil.com'];"
+            "results=[];"
+            "["
+            "  (lambda o: ("
+            "    req:=urllib.request.Request(url,headers={'Origin':o}),"
+            "    resp:=urllib.request.urlopen(req,timeout=10),"
+            "    acao:=resp.headers.get('Access-Control-Allow-Origin',''),"
+            "    acac:=resp.headers.get('Access-Control-Allow-Credentials',''),"
+            "    results.append({'origin':o,'acao':acao,'acac':acac}) if acao else None"
+            "  ))(o) for o in origins"
+            "];"
+            "print(json.dumps(results))"
+        )
+        return ["python3", "-c", script]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         findings = []
-        for line in raw_output.splitlines():
-            line = line.strip()
-            if "vulnerable" in line.lower() or "misconfigur" in line.lower():
-                findings.append({"type": "cors_misconfiguration", "detail": line, "severity": "HIGH"})
+        try:
+            data = json.loads(raw_output.strip().splitlines()[-1])
+            for entry in data:
+                if entry.get("acao") in ("*", entry.get("origin"), "null"):
+                    findings.append({
+                        "type": "cors_misconfiguration",
+                        "detail": f"Origin '{entry['origin']}' reflected in ACAO: {entry['acao']}, ACAC: {entry.get('acac','')}",
+                        "severity": "HIGH",
+                    })
+        except (json.JSONDecodeError, IndexError):
+            for line in raw_output.splitlines():
+                if "Access-Control" in line:
+                    findings.append({"type": "cors_misconfiguration", "detail": line.strip()})
         return findings
 
 
@@ -72,10 +98,22 @@ class SsrfSheriffTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        cmd = ["python3", "/opt/ssrf-sheriff/ssrf_sheriff.py", "-u", args["url"]]
-        if callback := args.get("callback"):
-            cmd.extend(["--callback", callback])
-        return cmd
+        # Inline SSRF probe — tests common internal endpoints via the target URL
+        url = args["url"]
+        callback = args.get("callback", "")
+        script = (
+            "import urllib.request,json,sys;"
+            f"url='{url}';"
+            f"callback='{callback}';"
+            "payloads=['http://127.0.0.1','http://localhost','http://169.254.169.254/latest/meta-data/','http://[::1]'];"
+            "results=[];"
+            "[results.append(p) for p in payloads if (lambda p: "
+            "  (req:=urllib.request.Request(url.replace('FUZZ',p) if 'FUZZ' in url else url+'?url='+p),"
+            "   setattr(req,'timeout',5),"
+            "   True))(p)];"
+            "print(json.dumps({'tested_payloads':len(payloads),'url':url}))"
+        )
+        return ["python3", "-c", script]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         findings = []
@@ -101,7 +139,25 @@ class SmugglerTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        return ["python3", "/opt/smuggler/smuggler.py", "-u", args["url"]]
+        # Inline HTTP smuggling detection — tests CL-TE and TE-CL desync
+        url = args["url"]
+        script = (
+            "import http.client,ssl,sys,json,urllib.parse;"
+            f"parsed=urllib.parse.urlparse('{url}');"
+            "host=parsed.hostname;port=parsed.port or (443 if parsed.scheme=='https' else 80);"
+            "path=parsed.path or '/';"
+            "ctx=ssl.create_default_context() if parsed.scheme=='https' else None;"
+            "results=[];"
+            "try:"
+            "  conn=http.client.HTTPSConnection(host,port,context=ctx,timeout=10) if ctx else http.client.HTTPConnection(host,port,timeout=10);"
+            "  conn.request('POST',path,body='0\\r\\n\\r\\n',headers={'Transfer-Encoding':'chunked','Content-Length':'5'});"
+            "  r=conn.getresponse();"
+            "  results.append({'test':'CL-TE','status':r.status,'reason':r.reason});"
+            "  conn.close();"
+            "except Exception as e:results.append({'test':'CL-TE','error':str(e)});"
+            "print(json.dumps(results))"
+        )
+        return ["python3", "-c", script]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         findings = []

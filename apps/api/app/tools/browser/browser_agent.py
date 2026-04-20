@@ -29,12 +29,15 @@ class BrowserTool(SecurityTool):
             "value": {"type": "string", "description": "Value for fill action or JS for evaluate."},
             "wait_for": {"type": "string", "description": "Selector to wait for after action."},
         },
-        "required": ["action"],
+        "required": ["action", "url"],
     }
 
     def build_command(self, args: dict) -> list[str]:
         action = args["action"]
         url = args.get("url", "")
+        if not url:
+            # Return a script that just reports the error
+            return ["python3", "-c", "import json;print(json.dumps({'error':'URL is required for browser actions'}))"]
         selector = args.get("selector", "")
         value = args.get("value", "")
         wait_for = args.get("wait_for", "")

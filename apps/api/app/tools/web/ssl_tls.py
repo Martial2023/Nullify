@@ -25,15 +25,12 @@ class TestsslTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        cmd = [
-            "testssl", "--jsonfile", "/dev/stdout",
-            "--quiet", "--color", "0",
-            "--sneaky",  # use less aggressive connection settings
-        ]
+        # testssl.sh checks for TTY — wrap in bash with TERM=dumb to avoid "not a tty"
+        flags = "--jsonfile /dev/stdout --quiet --color 0 --sneaky"
         if args.get("full", True):
-            cmd.append("--full")
-        cmd.append(args["target"])
-        return cmd
+            flags += " --full"
+        target = args["target"]
+        return ["bash", "-c", f"export TERM=dumb; testssl {flags} {target}"]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         findings = []
