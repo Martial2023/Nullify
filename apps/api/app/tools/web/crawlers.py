@@ -69,7 +69,7 @@ class HakrawlerTool(SecurityTool):
     def build_command(self, args: dict) -> list[str]:
         url = args["url"]
         depth = args.get("depth", 2)
-        return ["sh", "-c", f"echo '{url}' | hakrawler -d {depth} -plain"]
+        return ["sh", "-c", f"echo '{url}' | /usr/local/bin/hakrawler -d {depth} -plain"]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         return [
@@ -120,7 +120,7 @@ class WaybackUrlsTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        return ["sh", "-c", f"echo '{args['domain']}' | waybackurls"]
+        return ["sh", "-c", f"echo '{args['domain']}' | /usr/local/bin/waybackurls"]
 
     def parse_output(self, raw_output: str) -> list[dict]:
         return [

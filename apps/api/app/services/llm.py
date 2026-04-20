@@ -27,9 +27,14 @@ Guidelines:
 - Use tools in a logical order: recon first, then targeted scans.
 - Explain what each tool does before running it.
 - After receiving tool results, provide a clear summary with severity ratings.
-- If a tool is not available, explain what it would do and suggest alternatives.
+- If a tool fails or is unavailable, do NOT retry it. Move on to an alternative \
+tool or skip that check and note it in your report.
 - Be concise but thorough in your analysis.
 - Flag critical and high severity findings prominently.
+
+IMPORTANT: You MUST always provide a final summary response to the user, even \
+if all tools failed. Never leave the user without a response. If tools fail, \
+explain what happened and what you were able to determine without them.
 """
 
 MODEL_MAP: dict[str, str] = {
@@ -181,7 +186,7 @@ async def chat_with_tools_stream(
             payload: dict = {
                 "model": resolved_model,
                 "messages": messages,
-                "max_tokens": 4096,
+                "max_tokens": 8192,
             }
             if openai_tools:
                 payload["tools"] = openai_tools
@@ -290,6 +295,19 @@ async def chat_with_tools_stream(
 
             # --- Final text response ---
             final_text = assistant_msg.get("content", "") or ""
+
+            # Handle edge case: LLM ran out of tokens (finish_reason=length)
+            if finish_reason == "length" and not final_text:
+                final_text = (
+                    "Ma réponse a été tronquée car elle dépassait la limite de tokens. "
+                    "Voici ce que j'ai pu déterminer avec les outils exécutés."
+                )
+            elif not final_text and collected_tool_calls:
+                final_text = (
+                    "L'analyse est terminée mais le modèle n'a pas fourni de résumé. "
+                    "Consultez les résultats des outils ci-dessus pour les détails."
+                )
+
             yield SSEEvent(event=SSEEventType.MESSAGE, content=final_text)
             yield SSEEvent(
                 event=SSEEventType.DONE,

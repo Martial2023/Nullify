@@ -25,6 +25,9 @@ RUN apk add --no-cache \
 # Copy Go binaries from builder
 COPY --from=go-builder /go/bin/* /usr/local/bin/
 
+# Ensure /usr/local/bin is in PATH for sh -c commands
+ENV PATH="/usr/local/bin:${PATH}"
+
 # --- Python tools ---
 RUN pip3 install --no-cache-dir --break-system-packages \
     sqlmap commix arjun wafw00f sslyze wfuzz dirsearch uro

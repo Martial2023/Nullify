@@ -12,6 +12,9 @@ RUN apk add --no-cache bash curl ca-certificates python3 py3-pip \
     nmap nmap-scripts traceroute bind-tools whois netcat-openbsd arp-scan \
     git gcc musl-dev libffi-dev python3-dev libpcap-dev make
 
+# Ensure /usr/local/bin is in PATH for sh -c commands
+ENV PATH="/usr/local/bin:${PATH}"
+
 # Amass from builder
 COPY --from=go-builder /go/bin/amass /usr/local/bin/amass
 

@@ -62,9 +62,15 @@ for key in "${!IMAGES[@]}"; do
     continue
   fi
 
-  # Skip si l'image existe déjà et pas --force
-  if [[ $FORCE -eq 0 ]] && docker image inspect "${IMAGE}" >/dev/null 2>&1; then
-    echo "[deploy-tools] ${IMAGE} déjà présente, skip"
+  # Skip si l'image existe déjà, Dockerfile n'a pas changé, et pas --force
+  HASH_DIR="/tmp/nullify-docker-hashes"
+  mkdir -p "${HASH_DIR}"
+  CURRENT_HASH=$(sha256sum "${DOCKER_DIR}/${DOCKERFILE}" | cut -d' ' -f1)
+  STORED_HASH=""
+  [[ -f "${HASH_DIR}/${DOCKERFILE}.sha256" ]] && STORED_HASH=$(cat "${HASH_DIR}/${DOCKERFILE}.sha256")
+
+  if [[ $FORCE -eq 0 ]] && docker image inspect "${IMAGE}" >/dev/null 2>&1 && [[ "${CURRENT_HASH}" == "${STORED_HASH}" ]]; then
+    echo "[deploy-tools] ${IMAGE} déjà à jour, skip"
     SKIPPED=$((SKIPPED + 1))
     continue
   fi
@@ -72,6 +78,7 @@ for key in "${!IMAGES[@]}"; do
   echo "[deploy-tools] Building ${IMAGE}..."
   if docker build -t "${IMAGE}" -f "${DOCKER_DIR}/${DOCKERFILE}" "${DOCKER_DIR}"; then
     echo "[deploy-tools] ✓ ${IMAGE}"
+    echo "${CURRENT_HASH}" > "${HASH_DIR}/${DOCKERFILE}.sha256"
     BUILT=$((BUILT + 1))
   else
     echo "[deploy-tools] ✗ ${IMAGE} — échec du build"
