@@ -39,7 +39,13 @@ deactivate
 
 # ─── 2. Build des images Docker de sécurité ──────────────────
 log "2/5 Build des images Docker de sécurité"
-bash "${NULLIFY_ROOT}/docker/deploy-tools.sh" || log "  ⚠ Certaines images ont échoué (non bloquant)"
+# Force rebuild si les images n'ont jamais été buildées avec le système de hash
+if [[ ! -d "/tmp/nullify-docker-hashes" ]] || [[ -z "$(ls -A /tmp/nullify-docker-hashes 2>/dev/null)" ]]; then
+  log "  Première exécution — force rebuild de toutes les images"
+  bash "${NULLIFY_ROOT}/docker/deploy-tools.sh" --force 2>&1 | tail -50 || log "  ⚠ Certaines images ont échoué (non bloquant)"
+else
+  bash "${NULLIFY_ROOT}/docker/deploy-tools.sh" 2>&1 | tail -50 || log "  ⚠ Certaines images ont échoué (non bloquant)"
+fi
 
 # ─── 3. Override systemd (PATH) ─────────────────────────────
 log "3/5 Override systemd"

@@ -33,11 +33,12 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     sqlmap commix arjun wafw00f sslyze wfuzz dirsearch uro
 
 # --- Feroxbuster (Rust, pre-built) ---
-RUN curl -sL "https://github.com/epi052/feroxbuster/releases/latest/download/x86_64-linux-feroxbuster.tar.gz" \
+RUN curl -sfL "https://github.com/epi052/feroxbuster/releases/latest/download/x86_64-linux-feroxbuster.tar.gz" \
     -o /tmp/ferox.tar.gz \
     && tar xzf /tmp/ferox.tar.gz -C /usr/local/bin/ \
     && chmod +x /usr/local/bin/feroxbuster \
-    && rm /tmp/ferox.tar.gz
+    && rm /tmp/ferox.tar.gz \
+    || echo "WARNING: feroxbuster download failed (non-blocking)"
 
 # --- Nikto (Perl) ---
 RUN git clone --depth 1 https://github.com/sullo/nikto /opt/nikto \

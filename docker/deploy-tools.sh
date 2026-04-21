@@ -75,13 +75,15 @@ for key in "${!IMAGES[@]}"; do
     continue
   fi
 
-  echo "[deploy-tools] Building ${IMAGE}..."
-  if docker build -t "${IMAGE}" -f "${DOCKER_DIR}/${DOCKERFILE}" "${DOCKER_DIR}"; then
-    echo "[deploy-tools] ✓ ${IMAGE}"
+  echo "[deploy-tools] Building ${IMAGE} ($(date '+%H:%M:%S'))..."
+  BUILD_LOG="/tmp/nullify-build-${key}.log"
+  if docker build --progress=plain -t "${IMAGE}" -f "${DOCKER_DIR}/${DOCKERFILE}" "${DOCKER_DIR}" > "${BUILD_LOG}" 2>&1; then
+    echo "[deploy-tools] ✓ ${IMAGE} ($(date '+%H:%M:%S'))"
     echo "${CURRENT_HASH}" > "${HASH_DIR}/${DOCKERFILE}.sha256"
     BUILT=$((BUILT + 1))
   else
-    echo "[deploy-tools] ✗ ${IMAGE} — échec du build"
+    echo "[deploy-tools] ✗ ${IMAGE} — échec du build. Dernières lignes :"
+    tail -20 "${BUILD_LOG}" 2>/dev/null || true
     FAILED=$((FAILED + 1))
   fi
 done
