@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS go-builder
+FROM golang:1.23-alpine AS go-builder
 
 # Build Go tools from source (more reliable than downloading release binaries)
 RUN apk add --no-cache git
@@ -59,9 +59,10 @@ RUN apk add --no-cache ruby-dev build-base libffi-dev \
     && apk del build-base ruby-dev libffi-dev 2>/dev/null || true
 
 # --- WhatWeb (Ruby) ---
+RUN gem install bundler --no-doc 2>/dev/null || true
 RUN git clone --depth 1 https://github.com/urbanadventurer/WhatWeb /opt/whatweb \
-    && ln -sf /opt/whatweb/whatweb /usr/local/bin/whatweb \
     && chmod +x /opt/whatweb/whatweb \
+    && ln -sf /opt/whatweb/whatweb /usr/local/bin/whatweb \
     && cd /opt/whatweb && bundle install --without development 2>/dev/null || true
 
 # --- XSStrike (Python) ---
