@@ -13,6 +13,9 @@ RUN go install github.com/tomnomnom/anew@latest
 RUN go install github.com/hahwul/dalfox/v2@latest
 RUN go install github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest
 
+# Verify Go binaries were built
+RUN ls -la /go/bin/ && test -f /go/bin/waybackurls && test -f /go/bin/crlfuzz && test -f /go/bin/ffuf
+
 # ---
 
 FROM alpine:3.19
@@ -25,12 +28,22 @@ RUN apk add --no-cache \
 # Copy Go binaries from builder
 COPY --from=go-builder /go/bin/* /usr/local/bin/
 
+# Verify Go binaries are in place
+RUN waybackurls -h 2>&1 | head -1 || true \
+    && crlfuzz -h 2>&1 | head -1 || true \
+    && ffuf -V 2>&1 | head -1 || true
+
 # Ensure /usr/local/bin is in PATH for sh -c commands
 ENV PATH="/usr/local/bin:${PATH}"
 
-# --- Python tools ---
+# --- Python tools (pip) ---
 RUN pip3 install --no-cache-dir --break-system-packages \
-    sqlmap commix arjun wafw00f sslyze wfuzz dirsearch uro
+    sqlmap arjun wafw00f sslyze wfuzz dirsearch uro
+
+# --- Commix (from git — pip version has CLI incompatibilities) ---
+RUN git clone --depth 1 https://github.com/commixproject/commix /opt/commix \
+    && cd /opt/commix \
+    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt 2>/dev/null || true
 
 # --- Feroxbuster (Rust, pre-built) ---
 RUN curl -sfL "https://github.com/epi052/feroxbuster/releases/latest/download/x86_64-linux-feroxbuster.tar.gz" \
@@ -44,6 +57,12 @@ RUN curl -sfL "https://github.com/epi052/feroxbuster/releases/latest/download/x8
 RUN git clone --depth 1 https://github.com/sullo/nikto /opt/nikto \
     && ln -sf /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
     && chmod +x /usr/local/bin/nikto
+# Verify Perl modules needed by Nikto
+RUN perl -MJSON -e 'print "JSON OK\n"' \
+    && perl -MXML::Writer -e 'print "XML::Writer OK\n"' \
+    || (echo "ERROR: Perl modules missing — installing via cpan" \
+        && apk add --no-cache perl-app-cpanminus make \
+        && cpanm --notest JSON XML::Writer)
 
 # --- testssl.sh ---
 RUN git clone --depth 1 https://github.com/drwetter/testssl.sh /opt/testssl \
@@ -67,7 +86,25 @@ RUN git clone --depth 1 https://github.com/urbanadventurer/WhatWeb /opt/whatweb 
 
 # --- XSStrike (Python) ---
 RUN git clone --depth 1 https://github.com/s0md3v/XSStrike /opt/XSStrike \
-    && pip3 install --no-cache-dir --break-system-packages -r /opt/XSStrike/requirements.txt 2>/dev/null || true
+    && pip3 install --no-cache-dir --break-system-packages -r /opt/XSStrike/requirements.txt \
+    && test -f /opt/XSStrike/xsstrike.py
+
+# --- tplmap (Server-Side Template Injection) ---
+RUN git clone --depth 1 https://github.com/epinna/tplmap /opt/tplmap \
+    && cd /opt/tplmap \
+    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt 2>/dev/null || true \
+    && test -f /opt/tplmap/tplmap.py
+
+# --- jwt_tool (JWT security testing) ---
+RUN git clone --depth 1 https://github.com/ticarpi/jwt_tool /opt/jwt_tool \
+    && cd /opt/jwt_tool \
+    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt 2>/dev/null || true \
+    && test -f /opt/jwt_tool/jwt_tool.py
+
+# --- NoSQLMap (NoSQL injection) ---
+RUN git clone --depth 1 https://github.com/codingo/NoSQLMap /opt/nosqlmap \
+    && cd /opt/nosqlmap \
+    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt 2>/dev/null || true
 
 # --- Wordlists ---
 RUN mkdir -p /usr/share/wordlists/dirb \

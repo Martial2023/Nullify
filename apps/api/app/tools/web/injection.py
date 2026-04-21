@@ -26,7 +26,7 @@ class CommixTool(SecurityTool):
     }
 
     def build_command(self, args: dict) -> list[str]:
-        cmd = ["commix", "--url", args["url"],
+        cmd = ["python3", "/opt/commix/commix.py", "--url", args["url"],
                "--level", str(args.get("level", 2)),
                "--batch"]
         if data := args.get("data"):
