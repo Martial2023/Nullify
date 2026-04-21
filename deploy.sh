@@ -31,6 +31,9 @@ if [[ ! -d "${VENV_DIR}" ]]; then
   python3 -m venv "${VENV_DIR}"
 fi
 
+# Nettoyer les dist-info corrompus (préfixe ~) qui causent des warnings pip
+find "${VENV_DIR}" -maxdepth 5 -type d -name '~*' -exec rm -rf {} + 2>/dev/null || true
+
 # shellcheck disable=SC1091
 source "${VENV_DIR}/bin/activate"
 pip install --quiet --upgrade pip

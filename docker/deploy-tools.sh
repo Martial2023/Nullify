@@ -102,7 +102,7 @@ echo "[deploy-tools] Vérification des binaires clés :"
 declare -A SMOKE_TESTS=(
   ["nullify-tools:latest"]="nmap nuclei httpx subfinder"
   ["nullify-tools-network:latest"]="nmap masscan amass fierce"
-  ["nullify-tools-web:latest"]="gobuster ffuf katana nikto sqlmap whatweb"
+  ["nullify-tools-web:latest"]="gobuster ffuf katana nikto sqlmap whatweb waybackurls crlfuzz"
   ["nullify-tools-auth:latest"]="hydra john hashid"
   ["nullify-tools-binary:latest"]="gdb binwalk checksec strings"
 )

@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS go-builder
+FROM golang:1.24-alpine AS go-builder
 
 # Build Go tools from source (more reliable than downloading release binaries)
 RUN apk add --no-cache git
@@ -72,17 +72,18 @@ RUN git clone --depth 1 https://github.com/drwetter/testssl.sh /opt/testssl \
 # --- sslscan ---
 RUN apk add --no-cache sslscan || true
 
-# --- WPScan (Ruby) ---
-RUN apk add --no-cache ruby-dev build-base libffi-dev \
-    && gem install wpscan --no-doc \
-    && apk del build-base ruby-dev libffi-dev 2>/dev/null || true
+# --- Ruby tools (WPScan + WhatWeb) — keep build deps until both are done ---
+RUN apk add --no-cache ruby-dev build-base libffi-dev
+RUN gem install bundler wpscan --no-doc
 
-# --- WhatWeb (Ruby) ---
-RUN gem install bundler --no-doc 2>/dev/null || true
+# WhatWeb
 RUN git clone --depth 1 https://github.com/urbanadventurer/WhatWeb /opt/whatweb \
     && chmod +x /opt/whatweb/whatweb \
     && ln -sf /opt/whatweb/whatweb /usr/local/bin/whatweb \
-    && cd /opt/whatweb && bundle install --without development 2>/dev/null || true
+    && cd /opt/whatweb && bundle install --without development
+
+# Remove Ruby build deps after both tools are installed
+RUN apk del build-base ruby-dev libffi-dev 2>/dev/null || true
 
 # --- XSStrike (Python) ---
 RUN git clone --depth 1 https://github.com/s0md3v/XSStrike /opt/XSStrike \
