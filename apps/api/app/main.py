@@ -41,7 +41,7 @@ app = FastAPI(
 async def root():
     return {
         "message": "Welcome to the Nullify API",
-        "update_msg": "Réinstallation des outils compromis. 4"
+        "update_msg": "5 mise à jour des installations des outils fdf."
     }
 
 app.add_middleware(
